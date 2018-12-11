@@ -1,0 +1,11 @@
+#MATCH apple(a), not(a,d), animal(d)
+#CREATE {}(a), is(a,d3), silly(d3)
+#DELETE d, a-d;
+
+MATCH *(a), not(a,d), *(d)
+CREATE (a), is(a,d3), *(d3)
+DELETE d, a-d;
+
+MATCH *(a), not(a,d), *(d)
+CREATE *(a2), not(a2,d3), *(d3)
+DELETE a, d, a-d;

@@ -1,0 +1,7 @@
+parvusdb
+python-igraph
+numpy
+gensim
+torch
+torchvision
+nose

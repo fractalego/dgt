@@ -1,0 +1,18 @@
+
+MATCH apple(a), is(a,b), fruit(b)
+CREATE apple(a), not(a,d2), animal(d2)
+DELETE b, a-b;
+
+#MATCH fruit(a), is(a,b), fruit(b)
+#CREATE (a), is(a,d2), delicious(d2)
+#DELETE b, a-b;
+
+
+#MATCH pear(a), is(a,b), delicious(b)
+#CREATE (a), is(a,d2), tasty(d2)
+#DELETE b, a-b;
+
+
+#MATCH apple(a), not(a,b), animal(b)
+#CREATE apple(a), not(a,d2), zebra(d2)
+#DELETE b, a-b;
