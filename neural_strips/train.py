@@ -2,6 +2,8 @@ import os
 import pickle
 import json
 
+from gensim.models import KeyedVectors
+
 from neural_strips.inference.forward_inference import ForwardInference
 from neural_strips.utils import train_all_paths
 from neural_strips.utils import get_data_goal_knowledge_from_json
@@ -12,8 +14,9 @@ from neural_strips.utils import print_all_the_rules_with_weights
 _path = os.path.dirname(__file__)
 _gradient_test_filename = os.path.join(_path, '../data/two_gradient_rules_test.json')
 
-# from neural_strips.metric import GloveMetric
-# _metric = GloveMetric()
+# from neural_strips.metric import GloveMetri#c
+# _word2vec_model = KeyedVectors.load_word2vec_format(os.path.join(_path, '../data/glove.txt'))
+# _metric = GloveMetric(_word2vec_model)
 # pickle.dump(_metric, open(os.path.join(_path, '../data/metric.pickle'), 'wb'))
 _metric = pickle.load(open(os.path.join(_path, '../data/metric.pickle'), 'rb'))
 

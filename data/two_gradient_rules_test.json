@@ -1,6 +1,7 @@
 {
   "facts": ["apple(a), is(a,b), fruit(b)"],
   "goals": ["apple(a), is(a,b), delicious(b)"],
+  "relations": ["is", "not"],
   "non_trainable_rules" : ["MATCH apple(a), is(a,b), fruit(b) CREATE apple(a), not(a,d2), animal(d2) DELETE b, a-b"],
   "trainable_rules": [
     "MATCH *(a), not(a,d), *(d) CREATE (a), is(a,d3), *(d3) DELETE d, a-d",

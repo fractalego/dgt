@@ -1,4 +1,7 @@
+import os
 import torch
+
+from gensim.models import KeyedVectors
 
 from parvusdb import create_graph_from_string
 from parvusdb.utils.code_container import DummyCodeContainer
@@ -9,6 +12,9 @@ from neural_strips.drt import DrsRule
 from neural_strips.drt.drs import Drs
 from neural_strips.drt.node_matcher import VectorNodeMatcher
 from neural_strips.knowledge import Knowledge
+from neural_strips.metric import GloveMetric
+
+_path = os.path.dirname(__file__)
 
 
 def get_data_goal_knowledge_from_json(json_item, metric):
@@ -28,6 +34,15 @@ def get_data_goal_knowledge_from_json(json_item, metric):
     k.add_rules(nongrad_rules, gradient=False)
     k.add_rules(grad_rules, gradient=True)
     return data, goals, k
+
+
+def get_relations_embeddings_dict_from_json(json_item, embedding_size=20):
+    relations = json_item['relations']
+    embeddings = torch.nn.Embedding(len(relations), embedding_size)
+    vectors = [embeddings(torch.LongTensor([i]))[0].detach().numpy() for i in range(len(relations))]
+    model = KeyedVectors(embedding_size)
+    model.add(relations, vectors)
+    return GloveMetric(model)
 
 
 def print_predicates(k):
@@ -57,6 +72,7 @@ def get_string_with_all_the_rules_with_weights(k):
     for rule in rules:
         str_list.append(rule[0].predicates(print_threshold=False).strip())
     return str_list
+
 
 def create_rule_matrix(len_cons, len_hyp, matrix_size):
     rule_matrix = torch.zeros([matrix_size, matrix_size])
