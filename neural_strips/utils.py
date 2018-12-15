@@ -17,7 +17,7 @@ from neural_strips.metric import GloveMetric
 _path = os.path.dirname(__file__)
 
 
-def get_data_goal_knowledge_from_json(json_item, metric):
+def get_data_goal_knowledge_from_json(json_item, metric, relations_metric):
     fact_lst = json_item['facts']
     goal_lst = json_item['goals']
     if len(fact_lst) != len(goal_lst):
@@ -27,10 +27,10 @@ def get_data_goal_knowledge_from_json(json_item, metric):
     data = []
     goals = []
     for fact in fact_lst:
-        data.append(Drs.create_from_predicates_string(fact, metric, gradient=False))
+        data.append(Drs.create_from_predicates_string(fact, metric, relations_metric, gradient=False))
     for goal in goal_lst:
-        goals.append(Drs.create_from_predicates_string(goal, metric, gradient=False))
-    k = Knowledge(metric=metric)
+        goals.append(Drs.create_from_predicates_string(goal, metric, relations_metric, gradient=False))
+    k = Knowledge(metric=metric, relations_metric=relations_metric)
     k.add_rules(nongrad_rules, gradient=False)
     k.add_rules(grad_rules, gradient=True)
     return data, goals, k
@@ -90,7 +90,7 @@ def create_drs_list(inference_list, goal):
             hyp = item.get_hypothesis()
             cons = item.get_consequence()
             drs_list.append(hyp)
-            weight = item.weight.clamp(max=1.)
+            weight = item.weight.clamp(min=0, max=1.)
             rule_matrices.append(weight * create_rule_matrix(len(cons._g.vs), len(hyp._g.vs), 10))
         elif type(item) is Drs:
             drs_list.append(str(item))
@@ -115,7 +115,7 @@ def create_list_of_states(metric, drs_list, match):
 
         try:
             matching_variables = match.get_variables_substitution_dictionaries(gl, gr)
-
+            #print(matching_variables)
             substitutions.append(matching_variables)
             pre_items = [[item['name'], get_proper_vector(metric, item)] for item in gl.vs]
             post_items = [[item['name'], get_proper_vector(metric, item)] for item in gr.vs]
@@ -172,11 +172,11 @@ def create_scattering_sequence(pre_match, post_match, post_thresholds, substitut
     return scattering_sequence
 
 
-def train_all_paths(metric, k, paths, goal):
+def train_all_paths(metric, relations_metric, k, paths, goal, epochs=20):
     no_threshold_match = Match(matching_code_container=DummyCodeContainer(),
-                               node_matcher=VectorNodeMatcher(metric, gradient=True))
+                               node_matcher=VectorNodeMatcher(metric, relations_metric, gradient=True))
     threshold_match = Match(matching_code_container=DummyCodeContainer(),
-                            node_matcher=VectorNodeMatcher(metric, gradient=False))
+                            node_matcher=VectorNodeMatcher(metric, relations_metric, gradient=False))
     for item in paths:
         vectors_to_modify = metric.get_indexed_vectors()
         threshold_to_modify = metric.get_indexed_thresholds()
@@ -184,7 +184,8 @@ def train_all_paths(metric, k, paths, goal):
 
         optimizer = torch.optim.Adam(vectors_to_modify + threshold_to_modify + rules_weights_to_modify,
                                      lr=1e-2)
-        for i in range(200):
+        for i in range(epochs):
+            print('Epoch:', i)
             drs_list, rule_matrices = create_drs_list(item[2], goal)
 
             # Skip training for paths that do not have a differentiable rule
@@ -197,7 +198,8 @@ def train_all_paths(metric, k, paths, goal):
                 break
 
             # Printing path out while training
-            # [print(it.predicates()) for it in item[2]]
+            #print('new path:')
+            #[print(it.predicates()) for it in item[2]]
 
             pre_match, post_match, post_thresholds, substitutions = create_list_of_states(metric, drs_list,
                                                                                           no_threshold_match)
@@ -219,4 +221,6 @@ def train_all_paths(metric, k, paths, goal):
             new_drs_list, _ = create_drs_list(item[2], goal)
             _, _, _, substitutions = create_list_of_states(metric, new_drs_list, threshold_match)
             if substitutions:
+                print('new path:')
+                [print(it.predicates()) for it in item[2]]
                 break
