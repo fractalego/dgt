@@ -42,7 +42,13 @@ def get_relations_embeddings_dict_from_json(json_item, embedding_size=20):
     vectors = [embeddings(torch.LongTensor([i]))[0].detach().numpy() for i in range(len(relations))]
     model = KeyedVectors(embedding_size)
     model.add(relations, vectors)
-    return GloveMetric(model)
+    return GloveMetric(model, threshold=0.9)
+    #glove_model = GloveMetric(model, threshold=0.9)
+    #glove_model.get_vector_index('is')
+    #glove_model.get_vector_index('not')
+    #print(glove_model.indices_dot_product(0, 1))
+    #print(glove_model.indices_have_similar_vectors(0, 1))
+    #exit(0)
 
 
 def print_predicates(k):
@@ -148,7 +154,7 @@ def create_scattering_sequence(pre_match, post_match, post_thresholds, substitut
         bias_matrix = torch.ones([10, 10])
         for i2 in range(10):
             for j2 in range(10):
-                bias_matrix[i2, j2] = post_biases[j2].clamp(min=0, max=1) * 1
+                bias_matrix[i2, j2] = post_biases[j2].clamp(min=0.5, max=1) * 1
 
         softmax = torch.nn.Softmax()
         scattering_matrix = softmax(torch.mm(post_vectors, torch.transpose(pre_vectors, 0, 1)) - bias_matrix)
@@ -172,7 +178,7 @@ def create_scattering_sequence(pre_match, post_match, post_thresholds, substitut
     return scattering_sequence
 
 
-def train_all_paths(metric, relations_metric, k, paths, goal, epochs=20):
+def train_all_paths(metric, relations_metric, k, paths, goal, epochs=200):
     no_threshold_match = Match(matching_code_container=DummyCodeContainer(),
                                node_matcher=VectorNodeMatcher(metric, relations_metric, gradient=True))
     threshold_match = Match(matching_code_container=DummyCodeContainer(),

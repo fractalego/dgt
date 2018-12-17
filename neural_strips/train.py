@@ -14,11 +14,11 @@ from neural_strips.utils import print_all_the_rules_with_weights
 _path = os.path.dirname(__file__)
 _gradient_test_filename = os.path.join(_path, '../data/two_gradient_rules_test.json')
 
-from neural_strips.metric import GloveMetric
-_word2vec_model = KeyedVectors.load_word2vec_format(os.path.join(_path, '../data/glove_small.txt'))
-_metric = GloveMetric(_word2vec_model)
-pickle.dump(_metric, open(os.path.join(_path, '../data/metric.pickle'), 'wb'))
-# _metric = pickle.load(open(os.path.join(_path, '../data/metric.pickle'), 'rb'))
+# from neural_strips.metric import GloveMetric
+# _word2vec_model = KeyedVectors.load_word2vec_format(os.path.join(_path, '../data/glove.txt'))
+# _metric = GloveMetric(_word2vec_model)
+# pickle.dump(_metric, open(os.path.join(_path, '../data/metric.pickle'), 'wb'))
+_metric = pickle.load(open(os.path.join(_path, '../data/metric.pickle'), 'rb'))
 
 if __name__ == '__main__':
     relations_metric = get_relations_embeddings_dict_from_json(json.load(open(_gradient_test_filename)))

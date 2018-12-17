@@ -41,6 +41,7 @@ class Tests(unittest.TestCase):
             print(result_str_list)
             self.assertEqual(expected_str_list[0], result_str_list[0])
             self.assertEqual(expected_str_list[1], result_str_list[1])
+            self.assertEqual(expected_str_list[2], result_str_list[2])
 
     @unittest.skip
     def test_threshold_can_be_written_in_drs(self):
