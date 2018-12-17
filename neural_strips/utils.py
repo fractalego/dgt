@@ -43,12 +43,12 @@ def get_relations_embeddings_dict_from_json(json_item, embedding_size=20):
     model = KeyedVectors(embedding_size)
     model.add(relations, vectors)
     return GloveMetric(model, threshold=0.9)
-    #glove_model = GloveMetric(model, threshold=0.9)
-    #glove_model.get_vector_index('is')
-    #glove_model.get_vector_index('not')
-    #print(glove_model.indices_dot_product(0, 1))
-    #print(glove_model.indices_have_similar_vectors(0, 1))
-    #exit(0)
+    # glove_model = GloveMetric(model, threshold=0.9)
+    # glove_model.get_vector_index('is')
+    # glove_model.get_vector_index('not')
+    # print(glove_model.indices_dot_product(0, 1))
+    # print(glove_model.indices_have_similar_vectors(0, 1))
+    # exit(0)
 
 
 def print_predicates(k):
@@ -121,7 +121,7 @@ def create_list_of_states(metric, drs_list, match):
 
         try:
             matching_variables = match.get_variables_substitution_dictionaries(gl, gr)
-            #print(matching_variables)
+            # print(matching_variables)
             substitutions.append(matching_variables)
             pre_items = [[item['name'], get_proper_vector(metric, item)] for item in gl.vs]
             post_items = [[item['name'], get_proper_vector(metric, item)] for item in gr.vs]
@@ -178,55 +178,74 @@ def create_scattering_sequence(pre_match, post_match, post_thresholds, substitut
     return scattering_sequence
 
 
+def train_a_single_path(path, goal, metric, relation_metric, no_threshold_match, threshold_match, optimizer, epochs):
+    for i in range(epochs):
+        print('Epoch:', i)
+        drs_list, rule_matrices = create_drs_list(path[2], goal)
+
+        # Skip training for paths that do not have a differentiable rule
+        has_gradient_rule = False
+        for it in path[2]:
+            if it.gradient:
+                has_gradient_rule = True
+                break
+        if not has_gradient_rule:
+            break
+
+        # Printing path out while training
+        # print('new path:')
+        # [print(it.predicates()) for it in item[2]]
+
+        pre_match, post_match, post_thresholds, substitutions = create_list_of_states(metric, drs_list,
+                                                                                      no_threshold_match)
+        if not substitutions:
+            break
+        scattering_sequence = create_scattering_sequence(pre_match, post_match, post_thresholds, substitutions,
+                                                         rule_matrices)
+        initial_vector = torch.ones(10)
+        final_vector = torch.mv(scattering_sequence, initial_vector)
+        goal_vector = torch.Tensor([0 if item[0] is 'dummy' else 1 for item in post_match[-1]])
+
+        loss = -torch.mean(
+            goal_vector * torch.log(final_vector + 1e-15) + (1 - goal_vector) * torch.log(1 - final_vector + 1e-15))
+        optimizer.zero_grad()
+        loss.backward(retain_graph=True)
+        optimizer.step()
+
+        # Check if the trained sequence of rules actually satisfy the goal
+        new_drs_list, _ = create_drs_list(path[2], goal)
+        _, _, _, substitutions = create_list_of_states(metric, new_drs_list, threshold_match)
+        if substitutions:
+            print('new path:')
+            [print(it.predicates()) for it in path[2]]
+            return True
+
+    return False
+
+
 def train_all_paths(metric, relations_metric, k, paths, goal, epochs=200):
     no_threshold_match = Match(matching_code_container=DummyCodeContainer(),
                                node_matcher=VectorNodeMatcher(metric, relations_metric, gradient=True))
     threshold_match = Match(matching_code_container=DummyCodeContainer(),
                             node_matcher=VectorNodeMatcher(metric, relations_metric, gradient=False))
+
+    finished_paths = []
+
     for item in paths:
         vectors_to_modify = metric.get_indexed_vectors()
         threshold_to_modify = metric.get_indexed_thresholds()
         rules_weights_to_modify = [rule[0].weight for rule in k.get_all_rules()]
 
         optimizer = torch.optim.Adam(vectors_to_modify + threshold_to_modify + rules_weights_to_modify,
+                                     lr=1e-3)
+        if train_a_single_path(item, goal, metric, relations_metric, no_threshold_match, threshold_match, optimizer, epochs):
+            finished_paths.append(item)
+
+    for item in finished_paths:
+        vectors_to_modify = metric.get_indexed_vectors()
+        threshold_to_modify = metric.get_indexed_thresholds()
+        rules_weights_to_modify = [rule[0].weight for rule in k.get_all_rules()]
+
+        optimizer = torch.optim.Adam(vectors_to_modify + threshold_to_modify + rules_weights_to_modify,
                                      lr=1e-2)
-        for i in range(epochs):
-            print('Epoch:', i)
-            drs_list, rule_matrices = create_drs_list(item[2], goal)
-
-            # Skip training for paths that do not have a differentiable rule
-            has_gradient_rule = False
-            for it in item[2]:
-                if it.gradient:
-                    has_gradient_rule = True
-                    break
-            if not has_gradient_rule:
-                break
-
-            # Printing path out while training
-            #print('new path:')
-            #[print(it.predicates()) for it in item[2]]
-
-            pre_match, post_match, post_thresholds, substitutions = create_list_of_states(metric, drs_list,
-                                                                                          no_threshold_match)
-            if not substitutions:
-                break
-            scattering_sequence = create_scattering_sequence(pre_match, post_match, post_thresholds, substitutions,
-                                                             rule_matrices)
-            initial_vector = torch.ones(10)
-            final_vector = torch.mv(scattering_sequence, initial_vector)
-            goal_vector = torch.Tensor([0 if item[0] is 'dummy' else 1 for item in post_match[-1]])
-
-            loss = -torch.mean(
-                goal_vector * torch.log(final_vector + 1e-15) + (1 - goal_vector) * torch.log(1 - final_vector + 1e-15))
-            optimizer.zero_grad()
-            loss.backward(retain_graph=True)
-            optimizer.step()
-
-            # Check if the trained sequence of rules actually satisfy the goal
-            new_drs_list, _ = create_drs_list(item[2], goal)
-            _, _, _, substitutions = create_list_of_states(metric, new_drs_list, threshold_match)
-            if substitutions:
-                print('new path:')
-                [print(it.predicates()) for it in item[2]]
-                break
+        train_a_single_path(item, goal, metric, relations_metric, no_threshold_match, threshold_match, optimizer, epochs)
