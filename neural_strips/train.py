@@ -12,7 +12,7 @@ from neural_strips.utils import print_predicates
 from neural_strips.utils import print_all_the_rules_with_weights
 
 _path = os.path.dirname(__file__)
-_gradient_test_filename = os.path.join(_path, '../data/two_gradient_rules_test.json')
+_gradient_test_filename = os.path.join(_path, '../data/two_gradient_rules_test_with_sharp.json')
 
 # from neural_strips.metric import GloveMetric
 # _word2vec_model = KeyedVectors.load_word2vec_format(os.path.join(_path, '../data/glove.txt'))
@@ -31,7 +31,7 @@ if __name__ == '__main__':
         fw = ForwardInference(data=fact, knowledge=k)
         end_drs = fw.compute()
 
-        print_all_the_paths(end_drs)
-        train_all_paths(_metric, relations_metric, k, end_drs, goal)
+        #print_all_the_paths(end_drs)
+        train_all_paths(_metric, relations_metric, k, end_drs, goal, epochs=200)
 
         print_all_the_rules_with_weights(k)

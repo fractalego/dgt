@@ -210,7 +210,6 @@ def create_scattering_sequence(pre_match, post_match, post_thresholds, substitut
 
 def train_a_single_path(path, goal, metric, relation_metric, no_threshold_match, threshold_match, optimizer, epochs):
     for i in range(epochs):
-        print('Epoch:', i)
         drs_list, rule_matrices, relations_rule_matrices = create_drs_list(path[2], goal)
 
         # Skip training for paths that do not have a differentiable rule
@@ -260,14 +259,12 @@ def train_a_single_path(path, goal, metric, relation_metric, no_threshold_match,
         new_drs_list, _, _ = create_drs_list(path[2], goal)
         _, _, _, substitutions = create_list_of_states(metric, new_drs_list, threshold_match)
         if substitutions:
-            print('new path:')
-            [print(it.predicates()) for it in path[2]]
             return True
 
     return False
 
 
-def train_all_paths(metric, relations_metric, k, paths, goal, epochs=200):
+def train_all_paths(metric, relations_metric, k, paths, goal, epochs=50):
     no_threshold_match = Match(matching_code_container=DummyCodeContainer(),
                                node_matcher=VectorNodeMatcher(metric, relations_metric, gradient=True))
     threshold_match = Match(matching_code_container=DummyCodeContainer(),

@@ -4,7 +4,7 @@
   "relations": ["is", "not"],
   "non_trainable_rules" : ["MATCH apple(a), is(a,b), fruit(b) CREATE apple(a), not(a,d2), animal(d2) DELETE b, a-b"],
   "trainable_rules": [
-    "MATCH *(a), not(a,d), *(d) CREATE (a), is(a,d3), *(d3) DELETE d, a-d",
-    "MATCH *(a), not(a,d), *(d) CREATE *(a2), not(a2,d3), *(d3) DELETE a, d, a-d"
+    "MATCH *(a), #not(a,d), *(d) CREATE (a), #is(a,d3), *(d3) DELETE d, a-d",
+    "MATCH *(a), #not(a,d), *(d) CREATE *(a2), #not(a2,d3), *(d3) DELETE a, d, a-d"
   ]
 }
