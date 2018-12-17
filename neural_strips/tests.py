@@ -47,7 +47,7 @@ class Tests(unittest.TestCase):
         drs = Drs.create_from_predicates_string('apple>0.5(a), is(a,b), fruit>0.6(b)', _metric, relations_metric,
                                                 gradient=True)
         string = drs.predicates(print_threshold=True)
-        expected_str = 'apple>0.5(a), fruit>0.6(b), is>0.6(a,b)'
+        expected_str = 'apple>0.5(a), fruit>0.6(b), is>0.9(a,b)'
         self.assertEqual(expected_str, string)
 
     def test_relations_are_embedded(self):

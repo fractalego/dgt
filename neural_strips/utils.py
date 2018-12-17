@@ -43,12 +43,6 @@ def get_relations_embeddings_dict_from_json(json_item, embedding_size=20):
     model = KeyedVectors(embedding_size)
     model.add(relations, vectors)
     return GloveMetric(model, threshold=0.9)
-    # glove_model = GloveMetric(model, threshold=0.9)
-    # glove_model.get_vector_index('is')
-    # glove_model.get_vector_index('not')
-    # print(glove_model.indices_dot_product(0, 1))
-    # print(glove_model.indices_have_similar_vectors(0, 1))
-    # exit(0)
 
 
 def print_predicates(k):
@@ -91,6 +85,7 @@ def create_rule_matrix(len_cons, len_hyp, matrix_size):
 def create_drs_list(inference_list, goal):
     drs_list = []
     rule_matrices = []
+    relations_rule_matrices = []
     for item in inference_list:
         if type(item) is DrsRule:
             hyp = item.get_hypothesis()
@@ -98,14 +93,15 @@ def create_drs_list(inference_list, goal):
             drs_list.append(hyp)
             weight = item.weight.clamp(min=0, max=1.)
             rule_matrices.append(weight * create_rule_matrix(len(cons._g.vs), len(hyp._g.vs), 10))
+            relations_rule_matrices.append(weight * create_rule_matrix(len(cons._g.es), len(hyp._g.es), 10))
         elif type(item) is Drs:
             drs_list.append(str(item))
     drs_list.append(str(goal))
-    return drs_list, rule_matrices
+    return drs_list, rule_matrices, relations_rule_matrices
 
 
-def get_proper_vector(metric, item):
-    vector_index = item['vector']
+def get_proper_vector(metric, item, key):
+    vector_index = item[key]
     vector = metric.get_vector_from_index(vector_index) / metric.get_vector_from_index(vector_index).norm(2)
     return vector
 
@@ -123,8 +119,8 @@ def create_list_of_states(metric, drs_list, match):
             matching_variables = match.get_variables_substitution_dictionaries(gl, gr)
             # print(matching_variables)
             substitutions.append(matching_variables)
-            pre_items = [[item['name'], get_proper_vector(metric, item)] for item in gl.vs]
-            post_items = [[item['name'], get_proper_vector(metric, item)] for item in gr.vs]
+            pre_items = [[item['name'], get_proper_vector(metric, item, 'vector')] for item in gl.vs]
+            post_items = [[item['name'], get_proper_vector(metric, item, 'vector')] for item in gr.vs]
 
             len_pre_items = len(pre_items)
             len_post_items = len(post_items)
@@ -144,7 +140,41 @@ def create_list_of_states(metric, drs_list, match):
     return pre_match, post_match, post_thresholds, substitutions
 
 
-def create_scattering_sequence(pre_match, post_match, post_thresholds, substitutions, rule_matrices):
+def create_list_of_states_for_relations(metric, drs_list, match):
+    pre_match = []
+    post_match = []
+    post_thresholds = []
+    substitutions = []
+    for i in range(0, len(drs_list), 2):
+        gl = create_graph_from_string(str(drs_list[i]))
+        gr = create_graph_from_string(str(drs_list[i + 1]))
+
+        try:
+            matching_variables = match.get_variables_substitution_dictionaries(gl, gr)
+            # print(matching_variables)
+            substitutions.append(matching_variables)
+            pre_items = [[item['name'], get_proper_vector(metric, item, 'rvector')] for item in gl.es]
+            post_items = [[item['name'], get_proper_vector(metric, item, 'rvector')] for item in gr.es]
+
+            len_pre_items = len(pre_items)
+            len_post_items = len(post_items)
+
+            pre_items += [['dummy', torch.zeros(20)] for _ in range(10 - len_pre_items)]
+            post_items += [['dummy', torch.zeros(20)] for _ in range(10 - len_post_items)]
+
+            pre_match.append(pre_items)
+            post_match.append(post_items)
+
+            post_thrs = [metric.get_threshold_from_index(item['rvector']) for item in gr.es]
+            post_thrs += [torch.ones(1) for _ in range(10 - len(post_thrs))]
+            post_thresholds.append(post_thrs)
+
+        except MatchException:
+            return [], [], [], []
+    return pre_match, post_match, post_thresholds, substitutions
+
+
+def create_scattering_sequence(pre_match, post_match, post_thresholds, substitutions, rule_matrices, nodes_or_relations):
     scattering_matrices = []
     for i in range(len(substitutions)):
         pre_vectors = torch.stack([item[1] for item in pre_match[i]])
@@ -159,7 +189,7 @@ def create_scattering_sequence(pre_match, post_match, post_thresholds, substitut
         softmax = torch.nn.Softmax()
         scattering_matrix = softmax(torch.mm(post_vectors, torch.transpose(pre_vectors, 0, 1)) - bias_matrix)
         adjacency_matrix = torch.zeros(scattering_matrix.shape)
-        for k, v in substitutions[i][0].items():
+        for k, v in substitutions[i][nodes_or_relations].items():
             l_index = [item[0] for item in pre_match[i]].index(v)
             r_index = [item[0] for item in post_match[i]].index(k)
             adjacency_matrix[l_index, r_index] = 1.
@@ -181,7 +211,7 @@ def create_scattering_sequence(pre_match, post_match, post_thresholds, substitut
 def train_a_single_path(path, goal, metric, relation_metric, no_threshold_match, threshold_match, optimizer, epochs):
     for i in range(epochs):
         print('Epoch:', i)
-        drs_list, rule_matrices = create_drs_list(path[2], goal)
+        drs_list, rule_matrices, relations_rule_matrices = create_drs_list(path[2], goal)
 
         # Skip training for paths that do not have a differentiable rule
         has_gradient_rule = False
@@ -198,22 +228,36 @@ def train_a_single_path(path, goal, metric, relation_metric, no_threshold_match,
 
         pre_match, post_match, post_thresholds, substitutions = create_list_of_states(metric, drs_list,
                                                                                       no_threshold_match)
+        relations_pre_match, relations_post_match, relations_post_thresholds, substitutions \
+            = create_list_of_states_for_relations(relation_metric, drs_list, no_threshold_match)
+
         if not substitutions:
             break
         scattering_sequence = create_scattering_sequence(pre_match, post_match, post_thresholds, substitutions,
-                                                         rule_matrices)
+                                                         rule_matrices, nodes_or_relations=0)
+        relations_scattering_sequence = create_scattering_sequence(relations_pre_match, relations_post_match,
+                                                                   relations_post_thresholds, substitutions,
+                                                                   relations_rule_matrices, nodes_or_relations=1)
         initial_vector = torch.ones(10)
         final_vector = torch.mv(scattering_sequence, initial_vector)
         goal_vector = torch.Tensor([0 if item[0] is 'dummy' else 1 for item in post_match[-1]])
 
+        relations_initial_vector = torch.ones(10)
+        relations_final_vector = torch.mv(relations_scattering_sequence, relations_initial_vector)
+        relations_goal_vector = torch.Tensor([0 if item[0] is 'dummy' else 1 for item in relations_post_match[-1]])
+
         loss = -torch.mean(
             goal_vector * torch.log(final_vector + 1e-15) + (1 - goal_vector) * torch.log(1 - final_vector + 1e-15))
+        loss += -torch.mean(
+            relations_goal_vector * torch.log(relations_final_vector + 1e-15) + (1 - relations_goal_vector) * torch.log(
+                1 - relations_final_vector + 1e-15))
+
         optimizer.zero_grad()
         loss.backward(retain_graph=True)
         optimizer.step()
 
         # Check if the trained sequence of rules actually satisfy the goal
-        new_drs_list, _ = create_drs_list(path[2], goal)
+        new_drs_list, _, _ = create_drs_list(path[2], goal)
         _, _, _, substitutions = create_list_of_states(metric, new_drs_list, threshold_match)
         if substitutions:
             print('new path:')
@@ -235,10 +279,14 @@ def train_all_paths(metric, relations_metric, k, paths, goal, epochs=200):
         vectors_to_modify = metric.get_indexed_vectors()
         threshold_to_modify = metric.get_indexed_thresholds()
         rules_weights_to_modify = [rule[0].weight for rule in k.get_all_rules()]
+        relations_vectors_to_modify = relations_metric.get_indexed_vectors()
+        relations_threshold_to_modify = relations_metric.get_indexed_thresholds()
 
-        optimizer = torch.optim.Adam(vectors_to_modify + threshold_to_modify + rules_weights_to_modify,
+        optimizer = torch.optim.Adam(vectors_to_modify + threshold_to_modify + rules_weights_to_modify
+                                     + relations_threshold_to_modify + relations_vectors_to_modify,
                                      lr=1e-3)
-        if train_a_single_path(item, goal, metric, relations_metric, no_threshold_match, threshold_match, optimizer, epochs):
+        if train_a_single_path(item, goal, metric, relations_metric, no_threshold_match, threshold_match, optimizer,
+                               epochs):
             finished_paths.append(item)
 
     for item in finished_paths:
@@ -248,4 +296,5 @@ def train_all_paths(metric, relations_metric, k, paths, goal, epochs=200):
 
         optimizer = torch.optim.Adam(vectors_to_modify + threshold_to_modify + rules_weights_to_modify,
                                      lr=1e-2)
-        train_a_single_path(item, goal, metric, relations_metric, no_threshold_match, threshold_match, optimizer, epochs)
+        train_a_single_path(item, goal, metric, relations_metric, no_threshold_match, threshold_match, optimizer,
+                            epochs)
