@@ -6,8 +6,8 @@ from igraph import Graph as iGraph
 from parvusdb import GraphDatabase
 from parvusdb.utils.code_container import DummyCodeContainerFactory
 
-from neural_strips.graph.graph import Graph, create_graph_from_predicates
-from neural_strips.auxiliary.config import device
+from dgt.graph.graph import Graph, create_graph_from_predicates
+from dgt.auxiliary.config import device
 from .node_matcher import VectorNodeMatcher
 
 
@@ -24,7 +24,8 @@ class GraphRule:
         self.relations_metric = relations_metric
         self.gradient = gradient
         self.action_pairs = self.__pre_process_text(text, gradient=gradient)
-        self.action_pairs.append(('RETURN', '__RESULT__'))
+        if '__RESULT__' not in text:
+            self.action_pairs.append(('RETURN', '__RESULT__'))
         vector = torch.Tensor(np.array([1.])).to(device)
         self.weight = torch.autograd.Variable(vector, requires_grad=gradient)
 
@@ -57,8 +58,8 @@ class GraphRule:
     def __str__(self):
         return self.__create_text(self.action_pairs)
 
-    def predicates(self, print_threshold=True):
-        return self.__create_text_with_predicates(self.action_pairs, print_threshold)
+    def predicates(self, print_threshold=True, print_gradient=False):
+        return self.__create_text_with_predicates(self.action_pairs, print_threshold, print_gradient)
 
     def __get_action_graph_pairs_from_query(self, query):
         import re
@@ -91,7 +92,7 @@ class GraphRule:
             string += str(context) + ' '
         return string
 
-    def __create_text_with_predicates(self, action_pairs, print_threshold):
+    def __create_text_with_predicates(self, action_pairs, print_threshold, print_gradient):
         string = ''
         for action, context in action_pairs:
             string += action + ' '
@@ -102,6 +103,6 @@ class GraphRule:
                 string += context.predicates(do_print_thresholds) + ' '
             else:
                 string += context + ' '
-        if self.gradient:
+        if print_gradient and self.gradient:
             string += ' ' + '*GRADIENT RULE*'
         return string

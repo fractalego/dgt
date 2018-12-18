@@ -2,7 +2,7 @@ import re
 import sys
 import logging
 
-from neural_strips.graph import GraphRule
+from dgt.graph import GraphRule
 from .graph_ner_cleaner import GraphNERCleaner
 
 _logger = logging.getLogger(__name__)

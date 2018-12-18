@@ -3,7 +3,7 @@ import os
 import torch
 import numpy as np
 
-from neural_strips.auxiliary.config import device
+from dgt.auxiliary.config import device
 
 class MetricBase(object):
     _substitution_dict = {}

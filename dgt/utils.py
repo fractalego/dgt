@@ -8,12 +8,12 @@ from parvusdb.utils.code_container import DummyCodeContainer
 from parvusdb.utils.match import Match
 from parvusdb.utils.match import MatchException
 
-from neural_strips.graph import GraphRule
-from neural_strips.graph.graph import Graph
-from neural_strips.graph.node_matcher import VectorNodeMatcher
-from neural_strips.knowledge import Knowledge
-from neural_strips.metric import GloveMetric
-from neural_strips.auxiliary.config import device
+from dgt.graph import GraphRule
+from dgt.graph.graph import Graph
+from dgt.graph.node_matcher import VectorNodeMatcher
+from dgt.knowledge import Knowledge
+from dgt.metric import GloveMetric
+from dgt.auxiliary.config import device
 
 _path = os.path.dirname(__file__)
 

@@ -5,17 +5,17 @@ import unittest
 
 from gensim.models import KeyedVectors
 
-from neural_strips.graph.graph import Graph
-from neural_strips.inference.forward_inference import ForwardInference
-from neural_strips.utils import train_all_paths, get_string_with_all_the_rules_with_weights, \
+from dgt.graph.graph import Graph
+from dgt.inference.forward_inference import ForwardInference
+from dgt.utils import train_all_paths, get_string_with_all_the_rules_with_weights, \
     get_relations_embeddings_dict_from_json
-from neural_strips.utils import get_data_goal_knowledge_from_json
+from dgt.utils import get_data_goal_knowledge_from_json
 
 _path = os.path.dirname(__file__)
 _two_gradient_rules_test_filename = os.path.join(_path, '../data/two_gradient_rules_test.json')
 _two_gradient_rules_with_sharp_test_filename = os.path.join(_path, '../data/two_gradient_rules_test_with_sharp.json')
 
-# from neural_strips.metric import GloveMetric
+# from dgt.metric import GloveMetric
 # _word2vec_model = KeyedVectors.load_word2vec_format(os.path.join(_path, '../data/glove.txt'))
 # _metric = GloveMetric(_word2vec_model)
 # pickle.dump(_metric, open(os.path.join(_path, '../data/metric.pickle'), 'wb'))
