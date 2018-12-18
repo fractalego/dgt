@@ -13,12 +13,15 @@ class DGT:
         self._goals = None
         self._k = None
 
-    def load(self, filestream):
-        json_dict = json.load(filestream)
+    def load_json(self, json_dict):
         self._relations_metric = get_relations_embeddings_dict_from_json(json_dict)
         self._data, self._goals, self._k = get_data_goal_knowledge_from_json(json_dict,
                                                                              self._metric,
                                                                              self._relations_metric)
+
+    def load(self, filestream):
+        json_dict = json.load(filestream)
+        self.load_json(json_dict)
 
     def fit(self, epochs=50, step=5e-3):
         for fact, goal in zip(self._data, self._goals):
@@ -42,7 +45,7 @@ class DGT:
     def save(self, filestream):
         to_return = {'facts': [item.predicates(print_threshold=False) for item in self._data],
                      'goals': [item.predicates(print_threshold=False) for item in self._goals],
-                     'relations': [word for word in  self._relations_metric._model.index2word],
+                     'relations': [word for word in self._relations_metric._model.index2word],
                      'non_trainable_rules': [rule[0].predicates() for rule in self._k.get_all_rules()]
                      }
         json.dump(to_return, filestream, indent=2)
