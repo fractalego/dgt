@@ -1,7 +1,7 @@
 import os
 import pickle
 
-from dgt import DGT
+from dgt import DGT, set_global_device
 
 _path = os.path.dirname(__file__)
 _gradient_test_filename = os.path.join(_path, '../data/two_gradient_rules_test.json')
@@ -13,6 +13,8 @@ from gensim.models import KeyedVectors
 #_metric = GloveMetric(_word2vec_model)
 #pickle.dump(_metric, open(os.path.join(_path, '../data/metric.pickle'), 'wb'))
 _metric = pickle.load(open(os.path.join(_path, '../data/metric.pickle'), 'rb'))
+
+set_global_device('cuda')
 
 if __name__ == '__main__':
     dgt = DGT(_metric)
