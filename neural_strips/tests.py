@@ -5,7 +5,7 @@ import unittest
 
 from gensim.models import KeyedVectors
 
-from neural_strips.drt.drs import Drs
+from neural_strips.graph.graph import Graph
 from neural_strips.inference.forward_inference import ForwardInference
 from neural_strips.utils import train_all_paths, get_string_with_all_the_rules_with_weights, \
     get_relations_embeddings_dict_from_json
@@ -30,9 +30,9 @@ class Tests(unittest.TestCase):
 
         for fact, goal in zip(data, goals):
             fw = ForwardInference(data=fact, knowledge=k)
-            end_drs = fw.compute()
+            end_graph = fw.compute()
 
-            train_all_paths(_metric, relations_metric, k, end_drs, goal, epochs=100, step=5e-3)
+            train_all_paths(_metric, relations_metric, k, end_graph, goal, epochs=100, step=5e-3)
 
             expected_str_list = [
                 "MATCH apple(a), fruit(b), is(a,b) CREATE apple(a), animal(d2), not(a,d2) DELETE b, a-b RETURN __RESULT__",
@@ -51,9 +51,9 @@ class Tests(unittest.TestCase):
 
         for fact, goal in zip(data, goals):
             fw = ForwardInference(data=fact, knowledge=k)
-            end_drs = fw.compute()
+            end_graph = fw.compute()
 
-            train_all_paths(_metric, relations_metric, k, end_drs, goal, epochs=100, step=5e-3)
+            train_all_paths(_metric, relations_metric, k, end_graph, goal, epochs=100, step=5e-3)
 
             expected_str_list = [
                 "MATCH apple(a), fruit(b), is(a,b) CREATE apple(a), animal(d2), not(a,d2) DELETE b, a-b RETURN __RESULT__",
@@ -66,9 +66,9 @@ class Tests(unittest.TestCase):
             self.assertEqual(expected_str_list[1], result_str_list[1])
             self.assertEqual(expected_str_list[2], result_str_list[2])
 
-    def test_threshold_can_be_written_in_drs(self):
+    def test_threshold_can_be_written_in_graph(self):
         relations_metric = get_relations_embeddings_dict_from_json(json.load(open(_two_gradient_rules_test_filename)))
-        drs = Drs.create_from_predicates_string('apple>0.5(a), is(a,b), fruit>0.6(b)', _metric, relations_metric,
+        drs = Graph.create_from_predicates_string('apple>0.5(a), is(a,b), fruit>0.6(b)', _metric, relations_metric,
                                                 gradient=True)
         string = drs.predicates(print_threshold=True)
         expected_str = 'apple>0.5(a), fruit>0.6(b), is>0.9(a,b)'

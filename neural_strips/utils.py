@@ -8,9 +8,9 @@ from parvusdb.utils.code_container import DummyCodeContainer
 from parvusdb.utils.match import Match
 from parvusdb.utils.match import MatchException
 
-from neural_strips.drt import DrsRule
-from neural_strips.drt.drs import Drs
-from neural_strips.drt.node_matcher import VectorNodeMatcher
+from neural_strips.graph import GraphRule
+from neural_strips.graph.graph import Graph
+from neural_strips.graph.node_matcher import VectorNodeMatcher
 from neural_strips.knowledge import Knowledge
 from neural_strips.metric import GloveMetric
 from neural_strips.auxiliary.config import device
@@ -28,9 +28,9 @@ def get_data_goal_knowledge_from_json(json_item, metric, relations_metric):
     data = []
     goals = []
     for fact in fact_lst:
-        data.append(Drs.create_from_predicates_string(fact, metric, relations_metric, gradient=False))
+        data.append(Graph.create_from_predicates_string(fact, metric, relations_metric, gradient=False))
     for goal in goal_lst:
-        goals.append(Drs.create_from_predicates_string(goal, metric, relations_metric, gradient=False))
+        goals.append(Graph.create_from_predicates_string(goal, metric, relations_metric, gradient=False))
     k = Knowledge(metric=metric, relations_metric=relations_metric)
     k.add_rules(nongrad_rules, gradient=False)
     k.add_rules(grad_rules, gradient=True)
@@ -53,8 +53,8 @@ def print_predicates(k):
         print(rule[0].predicates())
 
 
-def print_all_the_paths(end_drs):
-    for item in end_drs:
+def print_all_the_paths(end_graph):
+    for item in end_graph:
         print('---')
         print(item[1])
         [print(item.predicates()) for item in item[2]]
@@ -83,22 +83,22 @@ def create_rule_matrix(len_cons, len_hyp, matrix_size):
     return rule_matrix
 
 
-def create_drs_list(inference_list, goal):
-    drs_list = []
+def create_graph_list(inference_list, goal):
+    graph_list = []
     rule_matrices = []
     relations_rule_matrices = []
     for item in inference_list:
-        if type(item) is DrsRule:
+        if type(item) is GraphRule:
             hyp = item.get_hypothesis()
             cons = item.get_consequence()
-            drs_list.append(hyp)
+            graph_list.append(hyp)
             weight = item.weight.clamp(min=0, max=1.)
             rule_matrices.append(weight * create_rule_matrix(len(cons._g.vs), len(hyp._g.vs), 10))
             relations_rule_matrices.append(weight * create_rule_matrix(len(cons._g.es), len(hyp._g.es), 10))
-        elif type(item) is Drs:
-            drs_list.append(str(item))
-    drs_list.append(str(goal))
-    return drs_list, rule_matrices, relations_rule_matrices
+        elif type(item) is Graph:
+            graph_list.append(str(item))
+    graph_list.append(str(goal))
+    return graph_list, rule_matrices, relations_rule_matrices
 
 
 def get_proper_vector(metric, item, key):
@@ -107,14 +107,14 @@ def get_proper_vector(metric, item, key):
     return vector
 
 
-def create_list_of_states(metric, drs_list, match):
+def create_list_of_states(metric, graph_list, match):
     pre_match = []
     post_match = []
     post_thresholds = []
     substitutions = []
-    for i in range(0, len(drs_list), 2):
-        gl = create_graph_from_string(str(drs_list[i]))
-        gr = create_graph_from_string(str(drs_list[i + 1]))
+    for i in range(0, len(graph_list), 2):
+        gl = create_graph_from_string(str(graph_list[i]))
+        gr = create_graph_from_string(str(graph_list[i + 1]))
 
         try:
             matching_variables = match.get_variables_substitution_dictionaries(gl, gr)
@@ -141,14 +141,14 @@ def create_list_of_states(metric, drs_list, match):
     return pre_match, post_match, post_thresholds, substitutions
 
 
-def create_list_of_states_for_relations(metric, drs_list, match):
+def create_list_of_states_for_relations(metric, graph_list, match):
     pre_match = []
     post_match = []
     post_thresholds = []
     substitutions = []
-    for i in range(0, len(drs_list), 2):
-        gl = create_graph_from_string(str(drs_list[i]))
-        gr = create_graph_from_string(str(drs_list[i + 1]))
+    for i in range(0, len(graph_list), 2):
+        gl = create_graph_from_string(str(graph_list[i]))
+        gr = create_graph_from_string(str(graph_list[i + 1]))
 
         try:
             matching_variables = match.get_variables_substitution_dictionaries(gl, gr)
@@ -212,7 +212,7 @@ def create_scattering_sequence(pre_match, post_match, post_thresholds, substitut
 
 def train_a_single_path(path, goal, metric, relation_metric, no_threshold_match, threshold_match, optimizer, epochs):
     for i in range(epochs):
-        drs_list, rule_matrices, relations_rule_matrices = create_drs_list(path[2], goal)
+        graph_list, rule_matrices, relations_rule_matrices = create_graph_list(path[2], goal)
 
         # Skip training for paths that do not have a differentiable rule
         has_gradient_rule = False
@@ -227,10 +227,10 @@ def train_a_single_path(path, goal, metric, relation_metric, no_threshold_match,
         # print('new path:')
         # [print(it.predicates()) for it in item[2]]
 
-        pre_match, post_match, post_thresholds, substitutions = create_list_of_states(metric, drs_list,
+        pre_match, post_match, post_thresholds, substitutions = create_list_of_states(metric, graph_list,
                                                                                       no_threshold_match)
         relations_pre_match, relations_post_match, relations_post_thresholds, substitutions \
-            = create_list_of_states_for_relations(relation_metric, drs_list, no_threshold_match)
+            = create_list_of_states_for_relations(relation_metric, graph_list, no_threshold_match)
 
         if not substitutions:
             break
@@ -259,8 +259,8 @@ def train_a_single_path(path, goal, metric, relation_metric, no_threshold_match,
         optimizer.step()
 
         # Check if the trained sequence of rules actually satisfy the goal
-        new_drs_list, _, _ = create_drs_list(path[2], goal)
-        _, _, _, substitutions = create_list_of_states(metric, new_drs_list, threshold_match)
+        new_graph_list, _, _ = create_graph_list(path[2], goal)
+        _, _, _, substitutions = create_list_of_states(metric, new_graph_list, threshold_match)
         if substitutions:
             return True
 

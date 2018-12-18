@@ -30,11 +30,11 @@ if __name__ == '__main__':
         #print_predicates(k)
 
         fw = ForwardInference(data=fact, knowledge=k)
-        end_drs = fw.compute()
+        end_graph = fw.compute()
 
-        #print_all_the_paths(end_drs)
+        #print_all_the_paths(end_graph)
         start = time()
-        train_all_paths(_metric, relations_metric, k, end_drs, goal, epochs=50, step=5e-3)
+        train_all_paths(_metric, relations_metric, k, end_graph, goal, epochs=50, step=5e-3)
         print('Total time:', time() - start)
 
         print_all_the_rules_with_weights(k)
