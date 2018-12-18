@@ -2,6 +2,7 @@ import os
 import pickle
 import json
 
+from time import time
 from gensim.models import KeyedVectors
 
 from neural_strips.inference.forward_inference import ForwardInference
@@ -26,12 +27,14 @@ if __name__ == '__main__':
                                                        relations_metric)
 
     for fact, goal in zip(data, goals):
-        print_predicates(k)
+        #print_predicates(k)
 
         fw = ForwardInference(data=fact, knowledge=k)
         end_drs = fw.compute()
 
         #print_all_the_paths(end_drs)
-        train_all_paths(_metric, relations_metric, k, end_drs, goal, epochs=200)
+        start = time()
+        train_all_paths(_metric, relations_metric, k, end_drs, goal, epochs=50, step=5e-3)
+        print('Total time:', time() - start)
 
         print_all_the_rules_with_weights(k)

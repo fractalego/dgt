@@ -32,12 +32,12 @@ class Tests(unittest.TestCase):
             fw = ForwardInference(data=fact, knowledge=k)
             end_drs = fw.compute()
 
-            train_all_paths(_metric, relations_metric, k, end_drs, goal, epochs=200)
+            train_all_paths(_metric, relations_metric, k, end_drs, goal, epochs=100, step=5e-3)
 
             expected_str_list = [
                 "MATCH apple(a), fruit(b), is(a,b) CREATE apple(a), animal(d2), not(a,d2) DELETE b, a-b RETURN __RESULT__",
-                "MATCH apple(a), delicious(d), is(a,d) CREATE entity(a), delicious(d3), is(a,d3) DELETE d, a-d RETURN __RESULT__  *GRADIENT RULE*",
-                "MATCH apple(a), delicious(d), is(a,d) CREATE apple(a2), delicious(d3), is(a2,d3) DELETE a, d, a-d RETURN __RESULT__  *GRADIENT RULE*"]
+                "MATCH apple(a), fruit(d), is(a,d) CREATE entity(a), delicious(d3), is(a,d3) DELETE d, a-d RETURN __RESULT__  *GRADIENT RULE*",
+                "MATCH apple(a), animal(d), is(a,d) CREATE apple(a2), delicious(d3), is(a2,d3) DELETE a, d, a-d RETURN __RESULT__  *GRADIENT RULE*"]
             result_str_list = get_string_with_all_the_rules_with_weights(k)
             self.assertEqual(expected_str_list[0], result_str_list[0])
             self.assertEqual(expected_str_list[1], result_str_list[1])
@@ -53,16 +53,14 @@ class Tests(unittest.TestCase):
             fw = ForwardInference(data=fact, knowledge=k)
             end_drs = fw.compute()
 
-            train_all_paths(_metric, relations_metric, k, end_drs, goal, epochs=250)
+            train_all_paths(_metric, relations_metric, k, end_drs, goal, epochs=100, step=5e-3)
 
             expected_str_list = [
                 "MATCH apple(a), fruit(b), is(a,b) CREATE apple(a), animal(d2), not(a,d2) DELETE b, a-b RETURN __RESULT__",
-                "MATCH apple(a), animal(d), not(a,d) CREATE entity(a), delicious(d3), is(a,d3) DELETE d, a-d RETURN __RESULT__  *GRADIENT RULE*",
-                "MATCH apple(a), fruit(d), not(a,d) CREATE apple(a2), creatures(d3), not(a2,d3) DELETE a, d, a-d RETURN __RESULT__  *GRADIENT RULE*"]
+                "MATCH apple(a), nutritious(d), not(a,d) CREATE entity(a), delicious(d3), is(a,d3) DELETE d, a-d RETURN __RESULT__  *GRADIENT RULE*",
+                "MATCH apple(a), fruit(d), not(a,d) CREATE apple(a2), nutritious(d3), not(a2,d3) DELETE a, d, a-d RETURN __RESULT__  *GRADIENT RULE*"]
 
             result_str_list = get_string_with_all_the_rules_with_weights(k)
-
-            print(result_str_list)
 
             self.assertEqual(expected_str_list[0], result_str_list[0])
             self.assertEqual(expected_str_list[1], result_str_list[1])

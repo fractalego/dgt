@@ -13,6 +13,7 @@ from neural_strips.drt.drs import Drs
 from neural_strips.drt.node_matcher import VectorNodeMatcher
 from neural_strips.knowledge import Knowledge
 from neural_strips.metric import GloveMetric
+from neural_strips.auxiliary.config import device
 
 _path = os.path.dirname(__file__)
 
@@ -75,7 +76,7 @@ def get_string_with_all_the_rules_with_weights(k):
 
 
 def create_rule_matrix(len_cons, len_hyp, matrix_size):
-    rule_matrix = torch.zeros([matrix_size, matrix_size])
+    rule_matrix = torch.zeros([matrix_size, matrix_size]).to(device)
     for i in range(len_cons):
         for j in range(len_hyp):
             rule_matrix[i, j] = 1.
@@ -125,14 +126,14 @@ def create_list_of_states(metric, drs_list, match):
             len_pre_items = len(pre_items)
             len_post_items = len(post_items)
 
-            pre_items += [['dummy', torch.zeros(300)] for _ in range(10 - len_pre_items)]
-            post_items += [['dummy', torch.zeros(300)] for _ in range(10 - len_post_items)]
+            pre_items += [['dummy', torch.zeros(300).to(device)] for _ in range(10 - len_pre_items)]
+            post_items += [['dummy', torch.zeros(300).to(device)] for _ in range(10 - len_post_items)]
 
             pre_match.append(pre_items)
             post_match.append(post_items)
 
             post_thrs = [metric.get_threshold_from_index(item['vector']) for item in gr.vs]
-            post_thrs += [torch.ones(1) for _ in range(10 - len(post_thrs))]
+            post_thrs += [torch.ones(1).to(device) for _ in range(10 - len(post_thrs))]
             post_thresholds.append(post_thrs)
 
         except MatchException:
@@ -159,14 +160,14 @@ def create_list_of_states_for_relations(metric, drs_list, match):
             len_pre_items = len(pre_items)
             len_post_items = len(post_items)
 
-            pre_items += [['dummy', torch.zeros(20)] for _ in range(10 - len_pre_items)]
-            post_items += [['dummy', torch.zeros(20)] for _ in range(10 - len_post_items)]
+            pre_items += [['dummy', torch.zeros(20).to(device)] for _ in range(10 - len_pre_items)]
+            post_items += [['dummy', torch.zeros(20).to(device)] for _ in range(10 - len_post_items)]
 
             pre_match.append(pre_items)
             post_match.append(post_items)
 
             post_thrs = [metric.get_threshold_from_index(item['rvector']) for item in gr.es]
-            post_thrs += [torch.ones(1) for _ in range(10 - len(post_thrs))]
+            post_thrs += [torch.ones(1).to(device) for _ in range(10 - len(post_thrs))]
             post_thresholds.append(post_thrs)
 
         except MatchException:
@@ -174,21 +175,22 @@ def create_list_of_states_for_relations(metric, drs_list, match):
     return pre_match, post_match, post_thresholds, substitutions
 
 
-def create_scattering_sequence(pre_match, post_match, post_thresholds, substitutions, rule_matrices, nodes_or_relations):
+def create_scattering_sequence(pre_match, post_match, post_thresholds, substitutions, rule_matrices,
+                               nodes_or_relations):
     scattering_matrices = []
     for i in range(len(substitutions)):
         pre_vectors = torch.stack([item[1] for item in pre_match[i]])
         post_vectors = torch.stack([item[1] for item in post_match[i]])
         post_biases = torch.stack([item[0] for item in post_thresholds[i]])
 
-        bias_matrix = torch.ones([10, 10])
+        bias_matrix = torch.ones([10, 10]).to(device)
         for i2 in range(10):
             for j2 in range(10):
                 bias_matrix[i2, j2] = post_biases[j2].clamp(min=0.5, max=1) * 1
 
         softmax = torch.nn.Softmax()
         scattering_matrix = softmax(torch.mm(post_vectors, torch.transpose(pre_vectors, 0, 1)) - bias_matrix)
-        adjacency_matrix = torch.zeros(scattering_matrix.shape)
+        adjacency_matrix = torch.zeros(scattering_matrix.shape).to(device)
         for k, v in substitutions[i][nodes_or_relations].items():
             l_index = [item[0] for item in pre_match[i]].index(v)
             r_index = [item[0] for item in post_match[i]].index(k)
@@ -196,7 +198,7 @@ def create_scattering_sequence(pre_match, post_match, post_thresholds, substitut
         scattering_matrix = torch.mul(adjacency_matrix, scattering_matrix)
         scattering_matrices.append(scattering_matrix)
 
-    scattering_sequence = torch.eye(10)
+    scattering_sequence = torch.eye(10).to(device)
     for i, scattering_matrix in enumerate(scattering_matrices):
         scattering_sequence *= scattering_matrix
         try:
@@ -237,19 +239,20 @@ def train_a_single_path(path, goal, metric, relation_metric, no_threshold_match,
         relations_scattering_sequence = create_scattering_sequence(relations_pre_match, relations_post_match,
                                                                    relations_post_thresholds, substitutions,
                                                                    relations_rule_matrices, nodes_or_relations=1)
-        initial_vector = torch.ones(10)
+        initial_vector = torch.ones(10).to(device)
         final_vector = torch.mv(scattering_sequence, initial_vector)
-        goal_vector = torch.Tensor([0 if item[0] is 'dummy' else 1 for item in post_match[-1]])
+        goal_vector = torch.Tensor([0 if item[0] is 'dummy' else 1 for item in post_match[-1]]).to(device)
 
-        relations_initial_vector = torch.ones(10)
+        relations_initial_vector = torch.ones(10).to(device)
         relations_final_vector = torch.mv(relations_scattering_sequence, relations_initial_vector)
-        relations_goal_vector = torch.Tensor([0 if item[0] is 'dummy' else 1 for item in relations_post_match[-1]])
+        relations_goal_vector = torch.Tensor([0 if item[0] is 'dummy' else 1 for item in relations_post_match[-1]]).to(device)
 
         loss = -torch.mean(
-            goal_vector * torch.log(final_vector + 1e-15) + (1 - goal_vector) * torch.log(1 - final_vector + 1e-15))
-        loss += -torch.mean(
-            relations_goal_vector * torch.log(relations_final_vector + 1e-15) + (1 - relations_goal_vector) * torch.log(
-                1 - relations_final_vector + 1e-15))
+            goal_vector * torch.log(final_vector + 1e-15) + (1 - goal_vector) * torch.log(1 - final_vector + 1e-15)
+            + relations_goal_vector * torch.log(relations_final_vector + 1e-15) + (
+                    1 - relations_goal_vector) * torch.log(
+                1 - relations_final_vector + 1e-15)
+        )
 
         optimizer.zero_grad()
         loss.backward(retain_graph=True)
@@ -264,7 +267,7 @@ def train_a_single_path(path, goal, metric, relation_metric, no_threshold_match,
     return False
 
 
-def train_all_paths(metric, relations_metric, k, paths, goal, epochs=50):
+def train_all_paths(metric, relations_metric, k, paths, goal, epochs=50, step=1e-2):
     no_threshold_match = Match(matching_code_container=DummyCodeContainer(),
                                node_matcher=VectorNodeMatcher(metric, relations_metric, gradient=True))
     threshold_match = Match(matching_code_container=DummyCodeContainer(),
@@ -281,7 +284,7 @@ def train_all_paths(metric, relations_metric, k, paths, goal, epochs=50):
 
         optimizer = torch.optim.Adam(vectors_to_modify + threshold_to_modify + rules_weights_to_modify
                                      + relations_threshold_to_modify + relations_vectors_to_modify,
-                                     lr=1e-3)
+                                     lr=step)
         if train_a_single_path(item, goal, metric, relations_metric, no_threshold_match, threshold_match, optimizer,
                                epochs):
             finished_paths.append(item)
@@ -292,6 +295,6 @@ def train_all_paths(metric, relations_metric, k, paths, goal, epochs=50):
         rules_weights_to_modify = [rule[0].weight for rule in k.get_all_rules()]
 
         optimizer = torch.optim.Adam(vectors_to_modify + threshold_to_modify + rules_weights_to_modify,
-                                     lr=1e-2)
+                                     lr=step)
         train_a_single_path(item, goal, metric, relations_metric, no_threshold_match, threshold_match, optimizer,
                             epochs)
