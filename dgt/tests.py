@@ -1,9 +1,9 @@
 import os
-import pickle
 import json
 import unittest
 
 from dgt import DGT
+from dgt.auxiliary.misc import get_metric_or_save_pickle
 from dgt.graph.graph import Graph
 from dgt.utils import get_relations_embeddings_dict_from_json
 
@@ -11,12 +11,7 @@ _path = os.path.dirname(__file__)
 _two_gradient_rules_test_filename = os.path.join(_path, '../data/two_gradient_rules_test.json')
 _two_gradient_rules_with_sharp_test_filename = os.path.join(_path, '../data/two_gradient_rules_test_with_sharp.json')
 
-# from dgt.metric import GloveMetric
-# from gensim.models import KeyedVectors
-# _word2vec_model = KeyedVectors.load_word2vec_format(os.path.join(_path, '../data/glove.txt'))
-# _metric = GloveMetric(_word2vec_model)
-# pickle.dump(_metric, open(os.path.join(_path, '../data/metric.pickle'), 'wb'))
-_metric = pickle.load(open(os.path.join(_path, '../data/metric.pickle'), 'rb'))
+_metric = get_metric_or_save_pickle(_path, '../data/glove.txt', '../data/metric.pickle')
 
 
 class Tests(unittest.TestCase):
