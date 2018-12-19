@@ -20,5 +20,5 @@ set_global_device('cpu')
 if __name__ == '__main__':
     dgt = DGT(_metric)
     dgt.fit(json.load(open(_gradient_test_filename)))
-    dgt.print_all_rules_with_weights()
+    print(dgt.get_all_rules_with_weights())
     dgt.save(open(os.path.join(_path, '../data/saved.json'), 'w'))

@@ -67,11 +67,11 @@ def print_all_the_rules_with_weights(k):
         print(rule[0].predicates(), rule[0].weight)
 
 
-def get_string_with_all_the_rules_with_weights(k):
+def get_string_with_all_the_rules_with_weights(k, print_gradient=False):
     rules = k.get_all_rules()
     str_list = []
     for rule in rules:
-        str_list.append(rule[0].predicates(print_threshold=False).strip())
+        str_list.append(rule[0].predicates(print_threshold=False, print_gradient=print_gradient).strip().replace('  ', ' '))
     return str_list
 
 

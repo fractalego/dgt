@@ -2,7 +2,7 @@ import json
 
 from dgt.inference import ForwardInference
 from dgt.utils import get_relations_embeddings_dict_from_json, get_data_goal_knowledge_from_json, train_all_paths, \
-    print_predicates, print_all_the_rules_with_weights
+    print_predicates, get_string_with_all_the_rules_with_weights
 
 
 class DGT:
@@ -44,8 +44,8 @@ class DGT:
     def print_all_rules(self):
         print_predicates(self._k)
 
-    def print_all_rules_with_weights(self):
-        print_all_the_rules_with_weights(self._k)
+    def get_all_rules_with_weights(self, print_gradient=False):
+        return get_string_with_all_the_rules_with_weights(self._k, print_gradient=False)
 
     def __load_from_json(self, json_dict):
         self._relations_metric = get_relations_embeddings_dict_from_json(json_dict)
