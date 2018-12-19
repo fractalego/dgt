@@ -13,17 +13,8 @@ class DGT:
         self._goals = None
         self._k = None
 
-    def load_json(self, json_dict):
-        self._relations_metric = get_relations_embeddings_dict_from_json(json_dict)
-        self._data, self._goals, self._k = get_data_goal_knowledge_from_json(json_dict,
-                                                                             self._metric,
-                                                                             self._relations_metric)
-
-    def load(self, filestream):
-        json_dict = json.load(filestream)
-        self.load_json(json_dict)
-
-    def fit(self, epochs=50, step=5e-3):
+    def fit(self, json_dict, epochs=50, step=5e-3):
+        self.__load_from_json(json_dict)
         for fact, goal in zip(self._data, self._goals):
             fw = ForwardInference(data=fact, knowledge=self._k)
             end_graphs = fw.compute()
@@ -55,3 +46,9 @@ class DGT:
 
     def print_all_rules_with_weights(self):
         print_all_the_rules_with_weights(self._k)
+
+    def __load_from_json(self, json_dict):
+        self._relations_metric = get_relations_embeddings_dict_from_json(json_dict)
+        self._data, self._goals, self._k = get_data_goal_knowledge_from_json(json_dict,
+                                                                             self._metric,
+                                                                             self._relations_metric)
