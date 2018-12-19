@@ -1,0 +1,27 @@
+from setuptools import setup
+
+setup(name='gdt',
+      version='0.0.1',
+      description='Differential Graph Transformations',
+      url='http://github.com/fractalego/gdt',
+      author='Alberto Cetoli',
+      author_email='alberto@nlulite.com',
+      license='MIT',
+      packages=['gdt',
+                'gdt.auxiliary',
+                'gdt.graph',
+                'gdt.inference',
+                'gdt.knowledge',
+                'gdt.metric',
+                ],
+      install_requires=[
+          'parvusdb',
+          'python-igraph',
+          'numpy',
+          'gensim',
+          'torch',
+          'torchvision',
+          'nose',
+      ],
+      include_package_data=True,
+      zip_safe=False)
