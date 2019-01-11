@@ -38,6 +38,7 @@ class GloveMetric(MetricBase):
         self._path = os.path.dirname(__file__)
         self._model = word2vec_model
         self._vector_matching_threshold = threshold
+        self.vector_size = word2vec_model.vector_size
 
     def get_vector_index(self, text, gradient=True):
         self._last_index += 1
@@ -54,7 +55,7 @@ class GloveMetric(MetricBase):
         threshold = torch.autograd.Variable(torch.Tensor(np.array([threshold])).to(device),
                                             requires_grad=gradient)
         if word == '*':
-            vector = torch.randn(300).to(device)
+            vector = torch.randn(self.vector_size).to(device)
         else:
             vector = torch.autograd.Variable(torch.Tensor(self._get_vector(word)).to(device), requires_grad=gradient)
 

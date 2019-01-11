@@ -37,7 +37,7 @@ def get_data_goal_knowledge_from_json(json_item, metric, relations_metric):
     return data, goals, k
 
 
-def get_relations_embeddings_dict_from_json(json_item, embedding_size=20):
+def get_relations_embeddings_dict_from_json(json_item, embedding_size=50):
     relations = json_item['relations']
     embeddings = torch.nn.Embedding(len(relations), embedding_size)
     vectors = [embeddings(torch.LongTensor([i]))[0].detach().numpy() for i in range(len(relations))]
@@ -126,8 +126,8 @@ def create_list_of_states(metric, graph_list, match):
             len_pre_items = len(pre_items)
             len_post_items = len(post_items)
 
-            pre_items += [['dummy', torch.zeros(300).to(device)] for _ in range(10 - len_pre_items)]
-            post_items += [['dummy', torch.zeros(300).to(device)] for _ in range(10 - len_post_items)]
+            pre_items += [['dummy', torch.zeros(metric.vector_size).to(device)] for _ in range(10 - len_pre_items)]
+            post_items += [['dummy', torch.zeros(metric.vector_size).to(device)] for _ in range(10 - len_post_items)]
 
             pre_match.append(pre_items)
             post_match.append(post_items)
@@ -160,8 +160,8 @@ def create_list_of_states_for_relations(metric, graph_list, match):
             len_pre_items = len(pre_items)
             len_post_items = len(post_items)
 
-            pre_items += [['dummy', torch.zeros(20).to(device)] for _ in range(10 - len_pre_items)]
-            post_items += [['dummy', torch.zeros(20).to(device)] for _ in range(10 - len_post_items)]
+            pre_items += [['dummy', torch.zeros(metric.vector_size).to(device)] for _ in range(10 - len_pre_items)]
+            post_items += [['dummy', torch.zeros(metric.vector_size).to(device)] for _ in range(10 - len_post_items)]
 
             pre_match.append(pre_items)
             post_match.append(post_items)
