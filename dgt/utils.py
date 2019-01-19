@@ -17,6 +17,8 @@ from dgt.auxiliary.config import device
 
 _path = os.path.dirname(__file__)
 
+_small = 1e-15
+
 
 def get_data_goal_knowledge_from_json(json_item, metric, relations_metric):
     fact_lst = json_item['facts']
@@ -71,8 +73,20 @@ def get_string_with_all_the_rules_with_weights(k, print_gradient=False):
     rules = k.get_all_rules()
     str_list = []
     for rule in rules:
-        str_list.append(rule[0].predicates(print_threshold=False, print_gradient=print_gradient).strip().replace('  ', ' '))
+        str_list.append(
+            rule[0].predicates(print_threshold=True, print_gradient=print_gradient).strip().replace('  ', ' '))
     return str_list
+
+
+def create_graph_list(inference_list, goal):
+    graph_list = []
+    for item in inference_list:
+        if type(item) is GraphRule:
+            graph_list.append(item.get_hypothesis())
+        elif type(item) is Graph:
+            graph_list.append(str(item))
+    graph_list.append(str(goal))
+    return graph_list
 
 
 def create_rule_matrix(len_cons, len_hyp, matrix_size):
@@ -83,22 +97,27 @@ def create_rule_matrix(len_cons, len_hyp, matrix_size):
     return rule_matrix
 
 
-def create_graph_list(inference_list, goal):
-    graph_list = []
+def create_all_rule_matrices(inference_list):
     rule_matrices = []
     relations_rule_matrices = []
     for item in inference_list:
         if type(item) is GraphRule:
             hyp = item.get_hypothesis()
             cons = item.get_consequence()
-            graph_list.append(hyp)
             weight = item.weight.clamp(min=0, max=1.)
-            rule_matrices.append(weight * create_rule_matrix(len(cons._g.vs), len(hyp._g.vs), 10))
-            relations_rule_matrices.append(weight * create_rule_matrix(len(cons._g.es), len(hyp._g.es), 10))
-        elif type(item) is Graph:
-            graph_list.append(str(item))
-    graph_list.append(str(goal))
-    return graph_list, rule_matrices, relations_rule_matrices
+            rule_matrix = weight * create_rule_matrix(len(cons._g.vs), len(hyp._g.vs), 10)
+            relation_rule_matrix = weight * create_rule_matrix(len(cons._g.es), len(hyp._g.es), 10)
+            rule_matrices.append(rule_matrix)
+            relations_rule_matrices.append(relation_rule_matrix)
+    return rule_matrices, relations_rule_matrices
+
+
+def get_weight_list(inference_list):
+    weight_list = []
+    for item in inference_list:
+        if type(item) is GraphRule:
+            weight_list.append(item.weight.clamp(min=0, max=1.))
+    return weight_list
 
 
 def get_proper_vector(metric, item, key):
@@ -133,7 +152,7 @@ def create_list_of_states(metric, graph_list, match):
             post_match.append(post_items)
 
             post_thrs = [metric.get_threshold_from_index(item['vector']) for item in gr.vs]
-            post_thrs += [torch.ones(1).to(device) for _ in range(10 - len(post_thrs))]
+            post_thrs += [torch.zeros(1).to(device) for _ in range(10 - len(post_thrs))]
             post_thresholds.append(post_thrs)
 
         except MatchException:
@@ -178,6 +197,7 @@ def create_list_of_states_for_relations(metric, graph_list, match):
 def create_scattering_sequence(pre_match, post_match, post_thresholds, substitutions, rule_matrices,
                                nodes_or_relations):
     scattering_matrices = []
+    adjacency_matrices = []
     for i in range(len(substitutions)):
         pre_vectors = torch.stack([item[1] for item in pre_match[i]])
         post_vectors = torch.stack([item[1] for item in post_match[i]])
@@ -195,15 +215,25 @@ def create_scattering_sequence(pre_match, post_match, post_thresholds, substitut
             l_index = [item[0] for item in pre_match[i]].index(v)
             r_index = [item[0] for item in post_match[i]].index(k)
             adjacency_matrix[l_index, r_index] = 1.
-        scattering_matrix = torch.mul(adjacency_matrix, scattering_matrix)
+        #scattering_matrix = torch.mul(adjacency_matrix, scattering_matrix)
         scattering_matrices.append(scattering_matrix)
+        adjacency_matrices.append(adjacency_matrix)
 
+    translate_up = torch.eye(10).to(device)
     scattering_sequence = torch.eye(10).to(device)
     for i, scattering_matrix in enumerate(scattering_matrices):
-        scattering_sequence *= scattering_matrix
+        scattering_sequence = torch.mm(adjacency_matrices[i], scattering_sequence)
+        scattering_sequence = torch.mm(scattering_matrix, scattering_sequence)
+        # scattering_sequence = torch.mm(adjacency_matrices[i], scattering_sequence)
+        # scattering_sequence = torch.mm(torch.transpose(adjacency_matrices[i], 0, 1), scattering_sequence)
         try:
+            # scattering_sequence = torch.mm(adjacency_matrices[i+1], scattering_sequence)
             rule_matrix = rule_matrices[i]
-            scattering_sequence *= rule_matrix
+            # rule_matrix = torch.eye(10)
+            #rule_matrix = torch.mm(rule_matrix, adjacency_matrices[i])
+            #rule_matrix = torch.mm(adjacency_matrices[i + 1], rule_matrix)
+            scattering_sequence = torch.mm(rule_matrix, scattering_sequence)
+            #scattering_sequence = torch.mm(adjacency_matrices[i + 1], scattering_sequence)
         except:
             pass
 
@@ -212,7 +242,8 @@ def create_scattering_sequence(pre_match, post_match, post_thresholds, substitut
 
 def train_a_single_path(path, goal, metric, relation_metric, no_threshold_match, threshold_match, optimizer, epochs):
     for i in range(epochs):
-        graph_list, rule_matrices, relations_rule_matrices = create_graph_list(path[2], goal)
+        graph_list = create_graph_list(path[2], goal)
+        rule_matrices, relations_rule_matrices = create_all_rule_matrices(path[2])
 
         # Skip training for paths that do not have a differentiable rule
         has_gradient_rule = False
@@ -225,7 +256,7 @@ def train_a_single_path(path, goal, metric, relation_metric, no_threshold_match,
 
         # Printing path out while training
         # print('new path:')
-        # [print(it.predicates()) for it in item[2]]
+        # [print(it.predicates()) for it in path[2]]
 
         pre_match, post_match, post_thresholds, substitutions = create_list_of_states(metric, graph_list,
                                                                                       no_threshold_match)
@@ -241,27 +272,28 @@ def train_a_single_path(path, goal, metric, relation_metric, no_threshold_match,
                                                                    relations_rule_matrices, nodes_or_relations=1)
         initial_vector = torch.ones(10).to(device)
         final_vector = torch.mv(scattering_sequence, initial_vector)
-        goal_vector = torch.Tensor([0 if item[0] is 'dummy' else 1 for item in post_match[-1]]).to(device)
+        # goal_vector = torch.Tensor([0 if item[0] is 'dummy' else 1 for item in post_match[-1]]).to(device)
+        goal_vector = torch.Tensor([1, 1, 1, 0, 0, 0, 0, 0, 0, 0])
 
         relations_initial_vector = torch.ones(10).to(device)
         relations_final_vector = torch.mv(relations_scattering_sequence, relations_initial_vector)
-        relations_goal_vector = torch.Tensor([0 if item[0] is 'dummy' else 1 for item in relations_post_match[-1]]).to(device)
+        relations_goal_vector = torch.Tensor([0 if item[0] is 'dummy' else 1 for item in relations_post_match[-1]]).to(
+            device)
 
-        loss = -torch.mean(
-            goal_vector * torch.log(final_vector + 1e-15) + (1 - goal_vector) * torch.log(1 - final_vector + 1e-15)
-            + relations_goal_vector * torch.log(relations_final_vector + 1e-15) + (
-                    1 - relations_goal_vector) * torch.log(
-                1 - relations_final_vector + 1e-15)
-        )
-
+        # criterion = torch.nn.BCEWithLogitsLoss()
+        criterion = torch.nn.MSELoss()
+        loss = (criterion(final_vector, goal_vector)
+                + criterion(relations_final_vector, relations_goal_vector)
+                ).to(device)
         optimizer.zero_grad()
         loss.backward(retain_graph=True)
         optimizer.step()
 
         # Check if the trained sequence of rules actually satisfy the goal
-        new_graph_list, _, _ = create_graph_list(path[2], goal)
+        new_graph_list = create_graph_list(path[2], goal)
         _, _, _, substitutions = create_list_of_states(metric, new_graph_list, threshold_match)
         if substitutions:
+            print('Making the substitution!', loss)
             return True
 
     return False
