@@ -206,30 +206,32 @@ def create_scattering_sequence(pre_match, post_match, post_thresholds, substitut
         bias_matrix = torch.ones([10, 10]).to(device)
         for i2 in range(10):
             for j2 in range(10):
-                bias_matrix[i2, j2] = post_biases[j2].clamp(min=0.5, max=1) * 1
+                bias_matrix[i2, j2] = post_biases[j2].clamp(min=0.5, max=1)
 
         softmax = torch.nn.Softmax()
         scattering_matrix = softmax(torch.mm(post_vectors, torch.transpose(pre_vectors, 0, 1)) - bias_matrix)
-        adjacency_matrix = torch.zeros(scattering_matrix.shape).to(device)
+        #adjacency_matrix = torch.zeros(scattering_matrix.shape).to(device)
+        adjacency_matrix = torch.eye(scattering_matrix.shape[0]).to(device)
+ #       print(substitutions[i])
         for k, v in substitutions[i][nodes_or_relations].items():
             l_index = [item[0] for item in pre_match[i]].index(v)
             r_index = [item[0] for item in post_match[i]].index(k)
+  #          print(l_index, r_index)
             adjacency_matrix[l_index, r_index] = 1.
-        #scattering_matrix = torch.mul(adjacency_matrix, scattering_matrix)
+        scattering_matrix = torch.mul(adjacency_matrix, scattering_matrix)
         scattering_matrices.append(scattering_matrix)
         adjacency_matrices.append(adjacency_matrix)
+#        print('scattering matrix\n', scattering_matrix)
 
-    translate_up = torch.eye(10).to(device)
     scattering_sequence = torch.eye(10).to(device)
     for i, scattering_matrix in enumerate(scattering_matrices):
-        scattering_sequence = torch.mm(adjacency_matrices[i], scattering_sequence)
+        #scattering_sequence = torch.mm(adjacency_matrices[i], scattering_sequence)
         scattering_sequence = torch.mm(scattering_matrix, scattering_sequence)
-        # scattering_sequence = torch.mm(adjacency_matrices[i], scattering_sequence)
-        # scattering_sequence = torch.mm(torch.transpose(adjacency_matrices[i], 0, 1), scattering_sequence)
+        #scattering_sequence = torch.mm(torch.transpose(adjacency_matrices[i], 0, 1), scattering_sequence) ### This flips the identical cons :O
         try:
             # scattering_sequence = torch.mm(adjacency_matrices[i+1], scattering_sequence)
-            rule_matrix = rule_matrices[i]
-            # rule_matrix = torch.eye(10)
+            #rule_matrix = rule_matrices[i]
+            rule_matrix = torch.eye(10)
             #rule_matrix = torch.mm(rule_matrix, adjacency_matrices[i])
             #rule_matrix = torch.mm(adjacency_matrices[i + 1], rule_matrix)
             scattering_sequence = torch.mm(rule_matrix, scattering_sequence)
@@ -237,6 +239,7 @@ def create_scattering_sequence(pre_match, post_match, post_thresholds, substitut
         except:
             pass
 
+    print('scattering sequence\n', scattering_sequence)
     return scattering_sequence
 
 
@@ -273,15 +276,16 @@ def train_a_single_path(path, goal, metric, relation_metric, no_threshold_match,
         initial_vector = torch.ones(10).to(device)
         final_vector = torch.mv(scattering_sequence, initial_vector)
         # goal_vector = torch.Tensor([0 if item[0] is 'dummy' else 1 for item in post_match[-1]]).to(device)
-        goal_vector = torch.Tensor([1, 1, 1, 0, 0, 0, 0, 0, 0, 0])
+        goal_vector = torch.Tensor([0, 1, 1, 0, 0, 0, 0, 0, 0, 0]).to(device)
+        # goal_vector = torch.ones(10).to(device)
 
         relations_initial_vector = torch.ones(10).to(device)
         relations_final_vector = torch.mv(relations_scattering_sequence, relations_initial_vector)
         relations_goal_vector = torch.Tensor([0 if item[0] is 'dummy' else 1 for item in relations_post_match[-1]]).to(
             device)
 
-        # criterion = torch.nn.BCEWithLogitsLoss()
-        criterion = torch.nn.MSELoss()
+        criterion = torch.nn.BCEWithLogitsLoss()
+        # criterion = torch.nn.MSELoss()
         loss = (criterion(final_vector, goal_vector)
                 + criterion(relations_final_vector, relations_goal_vector)
                 ).to(device)
