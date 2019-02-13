@@ -160,6 +160,48 @@ def create_list_of_states(metric, graph_list, match):
     return pre_match, post_match, post_thresholds, substitutions
 
 
+def order_pre_post_matches_according_to_substitutions(pre_match, post_match, substitutions, nodes_or_relations=0):
+    """
+    Reorders the matching vectors so that they are in the order of substitution (the scattering matrix becomes diagonal)
+    :param pre_match:
+    :param post_match:
+    :param substitutions:
+    :param nodes_or_relations:
+    :return:
+    """
+    new_pre_match = []
+    new_post_match = []
+    for i in range(len(substitutions)):
+        l_vector = []
+        r_vector = []
+        used_l_indices = []
+        used_r_indices = []
+        for k, v in substitutions[i][nodes_or_relations].items():
+            l_index = [item[0] for item in pre_match[i]].index(v)
+            r_index = [item[0] for item in post_match[i]].index(k)
+            l_vector.append(pre_match[i][l_index])
+            r_vector.append(post_match[i][r_index])
+            used_l_indices.append(v)
+            used_r_indices.append(k)
+
+        for item in pre_match[i]:
+            index = item[0]
+            if index in used_l_indices:
+                continue
+            l_vector.append(item)
+
+        for item in post_match[i]:
+            index = item[0]
+            if index in used_r_indices:
+                continue
+            r_vector.append(item)
+
+        new_pre_match.append(l_vector)
+        new_post_match.append(r_vector)
+
+    return new_pre_match, new_post_match
+
+
 def create_list_of_states_for_relations(metric, graph_list, match):
     pre_match = []
     post_match = []
@@ -210,36 +252,24 @@ def create_scattering_sequence(pre_match, post_match, post_thresholds, substitut
 
         softmax = torch.nn.Softmax()
         scattering_matrix = softmax(torch.mm(post_vectors, torch.transpose(pre_vectors, 0, 1)) - bias_matrix)
-        #adjacency_matrix = torch.zeros(scattering_matrix.shape).to(device)
-        adjacency_matrix = torch.eye(scattering_matrix.shape[0]).to(device)
- #       print(substitutions[i])
+        adjacency_matrix = torch.zeros(scattering_matrix.shape).to(device)
         for k, v in substitutions[i][nodes_or_relations].items():
             l_index = [item[0] for item in pre_match[i]].index(v)
             r_index = [item[0] for item in post_match[i]].index(k)
-  #          print(l_index, r_index)
             adjacency_matrix[l_index, r_index] = 1.
         scattering_matrix = torch.mul(adjacency_matrix, scattering_matrix)
         scattering_matrices.append(scattering_matrix)
         adjacency_matrices.append(adjacency_matrix)
-#        print('scattering matrix\n', scattering_matrix)
 
     scattering_sequence = torch.eye(10).to(device)
     for i, scattering_matrix in enumerate(scattering_matrices):
-        #scattering_sequence = torch.mm(adjacency_matrices[i], scattering_sequence)
         scattering_sequence = torch.mm(scattering_matrix, scattering_sequence)
-        #scattering_sequence = torch.mm(torch.transpose(adjacency_matrices[i], 0, 1), scattering_sequence) ### This flips the identical cons :O
         try:
-            # scattering_sequence = torch.mm(adjacency_matrices[i+1], scattering_sequence)
-            #rule_matrix = rule_matrices[i]
-            rule_matrix = torch.eye(10)
-            #rule_matrix = torch.mm(rule_matrix, adjacency_matrices[i])
-            #rule_matrix = torch.mm(adjacency_matrices[i + 1], rule_matrix)
+            rule_matrix = rule_matrices[i]
             scattering_sequence = torch.mm(rule_matrix, scattering_sequence)
-            #scattering_sequence = torch.mm(adjacency_matrices[i + 1], scattering_sequence)
         except:
             pass
 
-    print('scattering sequence\n', scattering_sequence)
     return scattering_sequence
 
 
@@ -268,16 +298,22 @@ def train_a_single_path(path, goal, metric, relation_metric, no_threshold_match,
 
         if not substitutions:
             break
+        pre_match, post_match = order_pre_post_matches_according_to_substitutions(pre_match, post_match, substitutions,
+                                                                                  nodes_or_relations=0)
+
         scattering_sequence = create_scattering_sequence(pre_match, post_match, post_thresholds, substitutions,
                                                          rule_matrices, nodes_or_relations=0)
+
+        relations_pre_match, relations_post_match = order_pre_post_matches_according_to_substitutions(
+            relations_pre_match, relations_post_match,
+            substitutions,
+            nodes_or_relations=1)
         relations_scattering_sequence = create_scattering_sequence(relations_pre_match, relations_post_match,
                                                                    relations_post_thresholds, substitutions,
                                                                    relations_rule_matrices, nodes_or_relations=1)
         initial_vector = torch.ones(10).to(device)
         final_vector = torch.mv(scattering_sequence, initial_vector)
-        # goal_vector = torch.Tensor([0 if item[0] is 'dummy' else 1 for item in post_match[-1]]).to(device)
-        goal_vector = torch.Tensor([0, 1, 1, 0, 0, 0, 0, 0, 0, 0]).to(device)
-        # goal_vector = torch.ones(10).to(device)
+        goal_vector = torch.Tensor([0 if item[0] is 'dummy' else 1 for item in post_match[-1]]).to(device)
 
         relations_initial_vector = torch.ones(10).to(device)
         relations_final_vector = torch.mv(relations_scattering_sequence, relations_initial_vector)
