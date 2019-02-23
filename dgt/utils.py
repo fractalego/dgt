@@ -196,6 +196,12 @@ def order_pre_post_matches_according_to_substitutions(pre_match, post_match, sub
                 continue
             r_vector.append(item)
 
+        # Sometimes indices can repeat themselves (due to the matching algorithm. This normalises the length to the max length
+        len_pre_items = len(l_vector)
+        len_post_items = len(r_vector)
+        l_vector += [['dummy', torch.zeros(pre_match[i][0][1].shape[0]).to(device)] for _ in range(10 - len_pre_items)]
+        l_vector += [['dummy', torch.zeros(post_match[i][0][1].shape[0]).to(device)] for _ in range(10 - len_post_items)]
+
         new_pre_match.append(l_vector)
         new_post_match.append(r_vector)
 
