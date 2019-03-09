@@ -1,9 +1,13 @@
 import copy
 import os
 import torch
+import time
 import numpy as np
 
 from dgt.auxiliary.config import device
+
+torch.manual_seed(time.time())
+
 
 class MetricBase(object):
     _substitution_dict = {}
@@ -78,6 +82,10 @@ class GloveMetric(MetricBase):
 
     def indices_have_similar_vectors(self, lindex, rindex):
         _, rthreshold = self._vector_map[rindex]
+        #print(self.get_most_similar_string_from_vector(
+        #    self.get_vector_from_index(lindex).cpu().detach().numpy()))
+        #print(self.get_most_similar_string_from_vector(
+        #    self.get_vector_from_index(rindex).cpu().detach().numpy()))
         return self.indices_dot_product(lindex, rindex) > rthreshold
 
     def indices_dot_product(self, lindex, rindex):

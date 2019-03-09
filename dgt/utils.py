@@ -18,7 +18,7 @@ from dgt.auxiliary.config import device
 _path = os.path.dirname(__file__)
 
 _small = 1e-15
-
+_max_items_size = 20
 
 def get_data_goal_knowledge_from_json(json_item, metric, relations_metric):
     fact_lst = json_item['facts']
@@ -26,7 +26,10 @@ def get_data_goal_knowledge_from_json(json_item, metric, relations_metric):
     if len(fact_lst) != len(goal_lst):
         raise RuntimeError('The number of facts and goals is not the same!')
     nongrad_rules = '; '.join(json_item['non_trainable_rules'])
-    grad_rules = '; '.join(json_item['trainable_rules'])
+    if 'trainable_rules' in json_item:
+        grad_rules = '; '.join(json_item['trainable_rules'])
+    else:
+        grad_rules = ''
     data = []
     goals = []
     for fact in fact_lst:
@@ -82,7 +85,7 @@ def create_graph_list(inference_list, goal):
     graph_list = []
     for item in inference_list:
         if type(item) is GraphRule:
-            graph_list.append(item.get_hypothesis())
+            graph_list.append(str(item.get_hypothesis()))
         elif type(item) is Graph:
             graph_list.append(str(item))
     graph_list.append(str(goal))
@@ -105,8 +108,8 @@ def create_all_rule_matrices(inference_list):
             hyp = item.get_hypothesis()
             cons = item.get_consequence()
             weight = item.weight.clamp(min=0, max=1.)
-            rule_matrix = weight * create_rule_matrix(len(cons._g.vs), len(hyp._g.vs), 10)
-            relation_rule_matrix = weight * create_rule_matrix(len(cons._g.es), len(hyp._g.es), 10)
+            rule_matrix = weight * create_rule_matrix(len(cons._g.vs), len(hyp._g.vs), _max_items_size)
+            relation_rule_matrix = weight * create_rule_matrix(len(cons._g.es), len(hyp._g.es), _max_items_size)
             rule_matrices.append(rule_matrix)
             relations_rule_matrices.append(relation_rule_matrix)
     return rule_matrices, relations_rule_matrices
@@ -126,7 +129,35 @@ def get_proper_vector(metric, item, key):
     return vector
 
 
-def create_list_of_states(metric, graph_list, match):
+def graph_iterations(g):
+    length = len(g.vs)
+    permutations = []
+    for i in range(length):
+        permutation = [(s + i) % length for s in range(length)]
+        permutations.append(g.permute_vertices(permutation))
+    return permutations
+
+
+def get_weighted_match(lhs, rhs, matching_variables, metric):
+    w = 0
+    for k, v in matching_variables[0].items():
+        rindex = rhs.vs['name' == v]['vector']
+        lindex = lhs.vs['name' == k]['vector']
+        w += metric.indices_dot_product(lindex, rindex)
+    return w
+
+
+def get_matching_variables(match, gl, gr, metric):
+    all_matches = []
+    for left_g in graph_iterations(gl):
+        matching_variables = match.get_variables_substitution_dictionaries(left_g, gr)
+        w = get_weighted_match(left_g, gr, matching_variables, metric)
+        all_matches.append((matching_variables, w))
+
+    return sorted(all_matches, key=lambda x: -x[1])[0][0]
+
+
+def create_list_of_states(metric, relations_metric, graph_list, match, permutation_shift):
     pre_match = []
     post_match = []
     post_thresholds = []
@@ -136,23 +167,56 @@ def create_list_of_states(metric, graph_list, match):
         gr = create_graph_from_string(str(graph_list[i + 1]))
 
         try:
-            matching_variables = match.get_variables_substitution_dictionaries(gl, gr)
-            # print(matching_variables)
-            substitutions.append(matching_variables)
+            iterations = graph_iterations(gl)
+            gl = iterations[permutation_shift % len(iterations)]
+            substitutions.append(match.get_variables_substitution_dictionaries(gl, gr))
+            # substitutions.append(get_matching_variables(match, gl, gr, metric))
             pre_items = [[item['name'], get_proper_vector(metric, item, 'vector')] for item in gl.vs]
             post_items = [[item['name'], get_proper_vector(metric, item, 'vector')] for item in gr.vs]
 
             len_pre_items = len(pre_items)
             len_post_items = len(post_items)
 
-            pre_items += [['dummy', torch.zeros(metric.vector_size).to(device)] for _ in range(10 - len_pre_items)]
-            post_items += [['dummy', torch.zeros(metric.vector_size).to(device)] for _ in range(10 - len_post_items)]
+            pre_items += [['dummy', torch.zeros(metric.vector_size).to(device)] for _ in range(_max_items_size - len_pre_items)]
+            post_items += [['dummy', torch.zeros(metric.vector_size).to(device)] for _ in range(_max_items_size - len_post_items)]
 
             pre_match.append(pre_items)
             post_match.append(post_items)
 
             post_thrs = [metric.get_threshold_from_index(item['vector']) for item in gr.vs]
-            post_thrs += [torch.zeros(1).to(device) for _ in range(10 - len(post_thrs))]
+            post_thrs += [torch.zeros(1).to(device) for _ in range(_max_items_size - len(post_thrs))]
+            post_thresholds.append(post_thrs)
+
+        except MatchException:
+            return [], [], [], []
+    return pre_match, post_match, post_thresholds, substitutions
+
+
+def create_list_of_states_without_weight_matching(metric, relations_metric, graph_list, match):
+    pre_match = []
+    post_match = []
+    post_thresholds = []
+    substitutions = []
+    for i in range(0, len(graph_list), 2):
+        gl = create_graph_from_string(str(graph_list[i]))
+        gr = create_graph_from_string(str(graph_list[i + 1]))
+
+        try:
+            substitutions.append(match.get_variables_substitution_dictionaries(gl, gr))
+            pre_items = [[item['name'], get_proper_vector(metric, item, 'vector')] for item in gl.vs]
+            post_items = [[item['name'], get_proper_vector(metric, item, 'vector')] for item in gr.vs]
+
+            len_pre_items = len(pre_items)
+            len_post_items = len(post_items)
+
+            pre_items += [['dummy', torch.zeros(metric.vector_size).to(device)] for _ in range(_max_items_size - len_pre_items)]
+            post_items += [['dummy', torch.zeros(metric.vector_size).to(device)] for _ in range(_max_items_size - len_post_items)]
+
+            pre_match.append(pre_items)
+            post_match.append(post_items)
+
+            post_thrs = [metric.get_threshold_from_index(item['vector']) for item in gr.vs]
+            post_thrs += [torch.zeros(1).to(device) for _ in range(_max_items_size - len(post_thrs))]
             post_thresholds.append(post_thrs)
 
         except MatchException:
@@ -199,8 +263,9 @@ def order_pre_post_matches_according_to_substitutions(pre_match, post_match, sub
         # Sometimes indices can repeat themselves (due to the matching algorithm. This normalises the length to the max length
         len_pre_items = len(l_vector)
         len_post_items = len(r_vector)
-        l_vector += [['dummy', torch.zeros(pre_match[i][0][1].shape[0]).to(device)] for _ in range(10 - len_pre_items)]
-        l_vector += [['dummy', torch.zeros(post_match[i][0][1].shape[0]).to(device)] for _ in range(10 - len_post_items)]
+        l_vector += [['dummy', torch.zeros(pre_match[i][0][1].shape[0]).to(device)] for _ in range(_max_items_size - len_pre_items)]
+        r_vector += [['dummy', torch.zeros(post_match[i][0][1].shape[0]).to(device)] for _ in
+                     range(_max_items_size - len_post_items)]
 
         new_pre_match.append(l_vector)
         new_post_match.append(r_vector)
@@ -208,7 +273,7 @@ def order_pre_post_matches_according_to_substitutions(pre_match, post_match, sub
     return new_pre_match, new_post_match
 
 
-def create_list_of_states_for_relations(metric, graph_list, match):
+def create_list_of_states_for_relations(nodes_metric, metric, graph_list, match, permutation_shift):
     pre_match = []
     post_match = []
     post_thresholds = []
@@ -218,23 +283,24 @@ def create_list_of_states_for_relations(metric, graph_list, match):
         gr = create_graph_from_string(str(graph_list[i + 1]))
 
         try:
-            matching_variables = match.get_variables_substitution_dictionaries(gl, gr)
-            # print(matching_variables)
-            substitutions.append(matching_variables)
+            iterations = graph_iterations(gl)
+            gl = iterations[permutation_shift % len(iterations)]
+            substitutions.append(match.get_variables_substitution_dictionaries(gl, gr))
+            # substitutions.append(get_matching_variables(match, gl, gr, nodes_metric))
             pre_items = [[item['name'], get_proper_vector(metric, item, 'rvector')] for item in gl.es]
             post_items = [[item['name'], get_proper_vector(metric, item, 'rvector')] for item in gr.es]
 
             len_pre_items = len(pre_items)
             len_post_items = len(post_items)
 
-            pre_items += [['dummy', torch.zeros(metric.vector_size).to(device)] for _ in range(10 - len_pre_items)]
-            post_items += [['dummy', torch.zeros(metric.vector_size).to(device)] for _ in range(10 - len_post_items)]
+            pre_items += [['dummy', torch.zeros(metric.vector_size).to(device)] for _ in range(_max_items_size - len_pre_items)]
+            post_items += [['dummy', torch.zeros(metric.vector_size).to(device)] for _ in range(_max_items_size - len_post_items)]
 
             pre_match.append(pre_items)
             post_match.append(post_items)
 
             post_thrs = [metric.get_threshold_from_index(item['rvector']) for item in gr.es]
-            post_thrs += [torch.ones(1).to(device) for _ in range(10 - len(post_thrs))]
+            post_thrs += [torch.ones(1).to(device) for _ in range(_max_items_size - len(post_thrs))]
             post_thresholds.append(post_thrs)
 
         except MatchException:
@@ -243,7 +309,7 @@ def create_list_of_states_for_relations(metric, graph_list, match):
 
 
 def create_scattering_sequence(pre_match, post_match, post_thresholds, substitutions, rule_matrices,
-                               nodes_or_relations):
+                               nodes_or_relations, clamp):
     scattering_matrices = []
     adjacency_matrices = []
     for i in range(len(substitutions)):
@@ -251,10 +317,10 @@ def create_scattering_sequence(pre_match, post_match, post_thresholds, substitut
         post_vectors = torch.stack([item[1] for item in post_match[i]])
         post_biases = torch.stack([item[0] for item in post_thresholds[i]])
 
-        bias_matrix = torch.ones([10, 10]).to(device)
-        for i2 in range(10):
-            for j2 in range(10):
-                bias_matrix[i2, j2] = post_biases[j2].clamp(min=0.5, max=1)
+        bias_matrix = torch.ones([_max_items_size, _max_items_size]).to(device)
+        for i2 in range(_max_items_size):
+            for j2 in range(_max_items_size):
+                bias_matrix[i2, j2] = post_biases[j2].clamp(min=clamp, max=1)
 
         softmax = torch.nn.Softmax()
         scattering_matrix = softmax(torch.mm(post_vectors, torch.transpose(pre_vectors, 0, 1)) - bias_matrix)
@@ -267,7 +333,7 @@ def create_scattering_sequence(pre_match, post_match, post_thresholds, substitut
         scattering_matrices.append(scattering_matrix)
         adjacency_matrices.append(adjacency_matrix)
 
-    scattering_sequence = torch.eye(10).to(device)
+    scattering_sequence = torch.eye(_max_items_size).to(device)
     for i, scattering_matrix in enumerate(scattering_matrices):
         scattering_sequence = torch.mm(scattering_matrix, scattering_sequence)
         try:
@@ -279,7 +345,7 @@ def create_scattering_sequence(pre_match, post_match, post_thresholds, substitut
     return scattering_sequence
 
 
-def train_a_single_path(path, goal, metric, relation_metric, no_threshold_match, threshold_match, optimizer, epochs):
+def train_a_single_path(path, goal, metric, relation_metric, no_threshold_match, threshold_match, optimizer, epochs, permutation_shift, clamp):
     for i in range(epochs):
         graph_list = create_graph_list(path[2], goal)
         rule_matrices, relations_rule_matrices = create_all_rule_matrices(path[2])
@@ -297,18 +363,24 @@ def train_a_single_path(path, goal, metric, relation_metric, no_threshold_match,
         # print('new path:')
         # [print(it.predicates()) for it in path[2]]
 
-        pre_match, post_match, post_thresholds, substitutions = create_list_of_states(metric, graph_list,
-                                                                                      no_threshold_match)
+        pre_match, post_match, post_thresholds, substitutions = create_list_of_states(metric,
+                                                                                      relation_metric,
+                                                                                      graph_list,
+                                                                                      no_threshold_match,
+                                                                                      permutation_shift)
         relations_pre_match, relations_post_match, relations_post_thresholds, substitutions \
-            = create_list_of_states_for_relations(relation_metric, graph_list, no_threshold_match)
+            = create_list_of_states_for_relations(metric, relation_metric, graph_list, no_threshold_match, permutation_shift)
 
         if not substitutions:
             break
         pre_match, post_match = order_pre_post_matches_according_to_substitutions(pre_match, post_match, substitutions,
                                                                                   nodes_or_relations=0)
+        if not substitutions:
+            break
+        # print(substitutions)
 
         scattering_sequence = create_scattering_sequence(pre_match, post_match, post_thresholds, substitutions,
-                                                         rule_matrices, nodes_or_relations=0)
+                                                         rule_matrices, nodes_or_relations=0, clamp=clamp)
 
         relations_pre_match, relations_post_match = order_pre_post_matches_according_to_substitutions(
             relations_pre_match, relations_post_match,
@@ -316,12 +388,13 @@ def train_a_single_path(path, goal, metric, relation_metric, no_threshold_match,
             nodes_or_relations=1)
         relations_scattering_sequence = create_scattering_sequence(relations_pre_match, relations_post_match,
                                                                    relations_post_thresholds, substitutions,
-                                                                   relations_rule_matrices, nodes_or_relations=1)
-        initial_vector = torch.ones(10).to(device)
+                                                                   relations_rule_matrices, nodes_or_relations=1,
+                                                                   clamp=clamp)
+        initial_vector = torch.ones(_max_items_size).to(device)
         final_vector = torch.mv(scattering_sequence, initial_vector)
         goal_vector = torch.Tensor([0 if item[0] is 'dummy' else 1 for item in post_match[-1]]).to(device)
 
-        relations_initial_vector = torch.ones(10).to(device)
+        relations_initial_vector = torch.ones(_max_items_size).to(device)
         relations_final_vector = torch.mv(relations_scattering_sequence, relations_initial_vector)
         relations_goal_vector = torch.Tensor([0 if item[0] is 'dummy' else 1 for item in relations_post_match[-1]]).to(
             device)
@@ -337,7 +410,8 @@ def train_a_single_path(path, goal, metric, relation_metric, no_threshold_match,
 
         # Check if the trained sequence of rules actually satisfy the goal
         new_graph_list = create_graph_list(path[2], goal)
-        _, _, _, substitutions = create_list_of_states(metric, new_graph_list, threshold_match)
+        _, _, _, substitutions = create_list_of_states(metric, relation_metric, new_graph_list,
+                                                       threshold_match, permutation_shift)
         if substitutions:
             print('Making the substitution!', loss)
             return True
@@ -345,7 +419,7 @@ def train_a_single_path(path, goal, metric, relation_metric, no_threshold_match,
     return False
 
 
-def train_all_paths(metric, relations_metric, k, paths, goal, epochs=50, step=1e-2):
+def train_all_paths(metric, relations_metric, k, paths, goal, permutation_shift, clamp, epochs=50, step=1e-2):
     no_threshold_match = Match(matching_code_container=DummyCodeContainer(),
                                node_matcher=VectorNodeMatcher(metric, relations_metric, gradient=True))
     threshold_match = Match(matching_code_container=DummyCodeContainer(),
@@ -364,15 +438,10 @@ def train_all_paths(metric, relations_metric, k, paths, goal, epochs=50, step=1e
                                      + relations_threshold_to_modify + relations_vectors_to_modify,
                                      lr=step)
         if train_a_single_path(item, goal, metric, relations_metric, no_threshold_match, threshold_match, optimizer,
-                               epochs):
+                               epochs, permutation_shift, clamp):
             finished_paths.append(item)
 
-    for item in finished_paths:
-        vectors_to_modify = metric.get_indexed_vectors()
-        threshold_to_modify = metric.get_indexed_thresholds()
-        rules_weights_to_modify = [rule[0].weight for rule in k.get_all_rules()]
+    if finished_paths:
+        return finished_paths
 
-        optimizer = torch.optim.Adam(vectors_to_modify + threshold_to_modify + rules_weights_to_modify,
-                                     lr=step)
-        train_a_single_path(item, goal, metric, relations_metric, no_threshold_match, threshold_match, optimizer,
-                            epochs)
+    return None

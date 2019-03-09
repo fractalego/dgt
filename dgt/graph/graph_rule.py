@@ -28,6 +28,7 @@ class GraphRule:
             self.action_pairs.append(('RETURN', '__RESULT__'))
         vector = torch.Tensor(np.array([1.])).to(device)
         self.weight = torch.autograd.Variable(vector, requires_grad=gradient)
+        self.max_repeat = 5
 
     def test(self):
         g = iGraph(directed=True)
@@ -40,7 +41,7 @@ class GraphRule:
                            node_matcher=VectorNodeMatcher(self.metric, self.relations_metric, self.gradient),
                            code_container_factory=DummyCodeContainerFactory())
         text = self.__create_text(self.action_pairs) + ';'
-        lst = db.query(str(text), repeat_n_times=1)
+        lst = db.query(str(text), repeat_n_times=self.max_repeat)
         if lst and lst[0]['__RESULT__']:
             return True
         return False

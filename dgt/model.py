@@ -1,4 +1,5 @@
 import json
+import random
 
 from dgt.inference import ForwardInference
 from dgt.utils import get_relations_embeddings_dict_from_json, get_data_goal_knowledge_from_json, train_all_paths, \
@@ -6,32 +7,49 @@ from dgt.utils import get_relations_embeddings_dict_from_json, get_data_goal_kno
 
 
 class DGT:
-    def __init__(self, glove_metric):
+    def __init__(self, glove_metric, json_dict):
         self._metric = glove_metric
-        self._relations_metric = None
-        self._data = None
-        self._goals = None
-        self._k = None
-
-    def fit(self, json_dict, epochs=50, step=5e-3):
         self.__load_from_json(json_dict)
+
+    @property
+    def goals(self):
+        return self._goals
+
+    def fit(self, epochs=20, step=5e-3):
+        shifts_and_finished_paths = []
         for fact, goal in zip(self._data, self._goals):
-            fw = ForwardInference(data=fact, knowledge=self._k)
-            end_graphs = fw.compute()
-            train_all_paths(self._metric, self._relations_metric, self._k, end_graphs, goal, epochs, step)
+            for i in range(10):
+                fw = ForwardInference(data=fact, knowledge=self._k, permutation_shift=i)
+                end_graphs = fw.compute()
+                finished_paths = train_all_paths(self._metric, self._relations_metric, self._k, end_graphs, goal, i,
+                                                 0.7, epochs, step)
+                if finished_paths:
+                    train_all_paths(self._metric, self._relations_metric, self._k, finished_paths, goal, i,
+                                    0.7, 5, step)
+                    shifts_and_finished_paths.append((i, finished_paths, goal))
+                    break
+
+        for _ in range(100):
+            random.shuffle(shifts_and_finished_paths)
+            for i, path, goal in shifts_and_finished_paths:
+                train_all_paths(self._metric, self._relations_metric, self._k, path, goal, i, 0.7, 1, step)
 
     def predict(self, fact):
-        fw = ForwardInference(data=fact, knowledge=self._k)
+        fw = ForwardInference(data=fact, knowledge=self._k, permutation_shift=0)
         end_graphs = fw.compute()
         return [{'graph': item[0], 'score': item[1]} for item in end_graphs]
 
-    def predict_best(self, fact):
-        fw = ForwardInference(data=fact, knowledge=self._k)
-        end_graphs = fw.compute()
-        if not end_graphs:
-            return None
-        end_graphs = end_graphs[0]
-        return [{'graph': item[0], 'score': item[1]} for item in end_graphs]
+    def predict_best(self):
+        to_return = []
+        for fact in self._data:
+            fw = ForwardInference(data=fact, knowledge=self._k, permutation_shift=0)
+            end_graphs = fw.compute()
+            if end_graphs:
+                graph = end_graphs[0]
+                to_return.append({'graph': graph[0], 'score': graph[1]})
+            else:
+                to_return.append(None)
+        return to_return
 
     def save(self, filestream):
         to_return = {'facts': [item.predicates(print_threshold=False) for item in self._data],

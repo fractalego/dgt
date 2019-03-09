@@ -1,6 +1,7 @@
 import logging
 
 from dgt.graph.graph_matcher import GraphWeightedMatch
+from dgt.utils import graph_iterations
 
 _logger = logging.getLogger(__name__)
 
@@ -60,18 +61,25 @@ class BaseForwardInference:
 class ForwardInference(BaseForwardInference):
     _unique = UniqueNamesModifier()
 
-    def __init__(self, data, knowledge, max_depth=5):
+    def __init__(self, data, knowledge, permutation_shift, max_depth=1):
         self.data = data
         self.knowledge = knowledge
         self._max_depth = max_depth
+        self.permutation_shift = permutation_shift
 
     def __apply_clause_to_graph(self, rule, data):
         drs = data.copy()
         drs.visit(self._unique)
-        weighted_match = GraphWeightedMatch(rule.get_hypothesis(), self.knowledge._metric, self.knowledge._relations_metric)
         w = 1
+
+        iterations = graph_iterations(drs._g)
+        drs._g = iterations[self.permutation_shift % len(iterations)]
+
         if not rule.gradient:
+            weighted_match = GraphWeightedMatch(rule.get_hypothesis(), self.knowledge._metric,
+                                                self.knowledge._relations_metric)
             w = drs.visit(weighted_match)
+
         is_match = drs.visit(rule)
         if not is_match:
             return drs, 0
@@ -114,18 +122,3 @@ class ForwardInference(BaseForwardInference):
         results = sorted(results, key=lambda x: -x[1])
         return results
 
-
-class ForwardInferenceChain(BaseForwardInference):
-    def __init__(self, data, knowledge):
-        self.data = data
-        self.knowledge = knowledge
-
-    def compute(self):
-        data = self.data
-        tot_distance = 0
-        for knowledge_set in self.knowledge:
-            inference = ForwardInference(data, knowledge_set)
-            end_graph, distance = inference.compute()
-            data = end_graph
-            tot_distance += distance
-        return data, tot_distance
