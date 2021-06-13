@@ -7,32 +7,43 @@ from dgt.utils import get_relations_embeddings_dict_from_json, get_data_goal_kno
 
 
 class DGT:
-    def __init__(self, glove_metric, json_dict):
+    _clamp_threshold = 0.7
+    _max_depth = 1
+
+    def __init__(self, glove_metric):
         self._metric = glove_metric
-        self.__load_from_json(json_dict)
 
     @property
     def goals(self):
         return self._goals
 
-    def fit(self, epochs=20, step=5e-3):
+    def fit(self, json_dict, epochs=100, step=5e-3):
+        self.__load_from_json(json_dict)
         shifts_and_finished_paths = []
         for fact, goal in zip(self._data, self._goals):
-            for i in range(10):
-                fw = ForwardInference(data=fact, knowledge=self._k, permutation_shift=i)
+            for i in range(100):
+                permutations = [int(random.uniform(0, 10)) for _ in range(self._max_depth)]
+                permutations.append(0)
+                print(i, permutations)
+                fw = ForwardInference(data=fact, knowledge=self._k, permutation_shift=permutations,
+                                      max_depth=self._max_depth)
                 end_graphs = fw.compute()
-                finished_paths = train_all_paths(self._metric, self._relations_metric, self._k, end_graphs, goal, i,
-                                                 0.7, epochs, step)
+                finished_paths = train_all_paths(self._metric, self._relations_metric, self._k, end_graphs, goal,
+                                                 permutations,
+                                                 self._clamp_threshold, epochs, step)
                 if finished_paths:
-                    train_all_paths(self._metric, self._relations_metric, self._k, finished_paths, goal, i,
-                                    0.7, 5, step)
-                    shifts_and_finished_paths.append((i, finished_paths, goal))
+                    train_all_paths(self._metric, self._relations_metric, self._k, finished_paths, goal,
+                                    permutations,
+                                    self._clamp_threshold, 5, step)
+                    shifts_and_finished_paths.append((permutations, finished_paths, goal))
                     break
 
-        for _ in range(100):
-            random.shuffle(shifts_and_finished_paths)
-            for i, path, goal in shifts_and_finished_paths:
-                train_all_paths(self._metric, self._relations_metric, self._k, path, goal, i, 0.7, 1, step)
+        # for _ in range(100):
+        #    random.shuffle(shifts_and_finished_paths)
+        #    for permutations, path, goal in shifts_and_finished_paths:
+        #        train_all_paths(self._metric, self._relations_metric, self._k, path, goal,
+        #                        permutations,
+        #                        self._clamp_threshold, 1, 5e-3)
 
     def predict(self, fact):
         fw = ForwardInference(data=fact, knowledge=self._k, permutation_shift=0)

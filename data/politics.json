@@ -1,0 +1,10 @@
+{
+  "facts": ["person(a), spouse(a,b), person(b), is-a(a,c), first-lady(c)"],
+  "goals": ["person(a), profession(a,b), president(b)"],
+  "relations": ["is-a", "spouse", "profession"],
+  "non_trainable_rules" : [
+  ],
+  "trainable_rules": [
+    "MATCH *(a), *(a,b), *(b), *(a,c), *(c) CREATE (b), *(b,d), *(d)"
+  ]
+}

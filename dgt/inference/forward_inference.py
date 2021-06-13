@@ -1,4 +1,5 @@
 import logging
+import random
 
 from dgt.graph.graph_matcher import GraphWeightedMatch
 from dgt.utils import graph_iterations
@@ -62,18 +63,21 @@ class ForwardInference(BaseForwardInference):
     _unique = UniqueNamesModifier()
 
     def __init__(self, data, knowledge, permutation_shift, max_depth=1):
+        self.permutations = permutation_shift
         self.data = data
         self.knowledge = knowledge
         self._max_depth = max_depth
         self.permutation_shift = permutation_shift
 
-    def __apply_clause_to_graph(self, rule, data):
+    def __apply_clause_to_graph(self, rule, data, i):
         drs = data.copy()
         drs.visit(self._unique)
         w = 1
 
         iterations = graph_iterations(drs._g)
-        drs._g = iterations[self.permutation_shift % len(iterations)]
+        if not iterations:
+            return drs, 0
+        drs._g = iterations[self.permutations[i] % len(iterations)]
 
         if not rule.gradient:
             weighted_match = GraphWeightedMatch(rule.get_hypothesis(), self.knowledge._metric,
@@ -85,7 +89,7 @@ class ForwardInference(BaseForwardInference):
             return drs, 0
         return drs, w
 
-    def _compute_step(self, data_tuple):
+    def _compute_step(self, data_tuple, i):
         """
         Applies all the rules to a drs
         :return: all the variants of the drs after a rule match as a pair (<NEW_DRS>, <WEIGHT>)
@@ -101,7 +105,7 @@ class ForwardInference(BaseForwardInference):
             prior_rules = list(data_tuple[2])
             if rule in prior_rules:  # A rule can be used only once per path
                 continue
-            drs, w = self.__apply_clause_to_graph(rule, data)
+            drs, w = self.__apply_clause_to_graph(rule, data, i)
             if w > 0:
                 prior_rules.append(rule)
                 prior_rules.append(drs)
@@ -111,14 +115,13 @@ class ForwardInference(BaseForwardInference):
     def compute(self):
         results = []
         to_process = [(self.data, 1, [self.data])]
-        for _ in range(self._max_depth):
+        for i in range(self._max_depth):
             new_results = []
             for data_tuple in to_process:
-                new_results += self._compute_step(data_tuple)
+                new_results += self._compute_step(data_tuple, i)
             if not new_results:
                 break
             to_process = sorted(new_results, key=lambda x: -x[1])
             results += to_process
         results = sorted(results, key=lambda x: -x[1])
         return results
-

@@ -5,7 +5,8 @@ from dgt import DGT, set_global_device
 from dgt.auxiliary.misc import get_metric_or_save_pickle
 
 _path = os.path.dirname(__file__)
-_gradient_test_filename = os.path.join(_path, '../data/two_gradient_rules_test.json')
+#_gradient_test_filename = os.path.join(_path, '../data/politics.json')
+_gradient_test_filename = os.path.join(_path, '../data/more_gradient_rules.json')
 
 _metric = get_metric_or_save_pickle(_path, '../data/glove.txt', '../data/metric.pickle')
 
