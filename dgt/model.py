@@ -73,8 +73,10 @@ class DGT:
     def print_all_rules(self):
         print_predicates(self._k)
 
-    def get_all_rules_with_weights(self, print_gradient=False):
-        return get_string_with_all_the_rules_with_weights(self._k, print_gradient=False)
+    def get_all_rules_with_weights(self, print_threshold=True, print_gradient=False):
+        return get_string_with_all_the_rules_with_weights(self._k,
+                                                          print_threshold=print_threshold,
+                                                          print_gradient=print_gradient)
 
     def __load_from_json(self, json_dict):
         self._relations_metric = get_relations_embeddings_dict_from_json(json_dict)

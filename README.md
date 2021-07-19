@@ -23,3 +23,17 @@ echo "2196017 300" | cat - glove.840B.300d.txt > glove.txt
 cd ..
 ```
 
+Run the two test files
+-----------------------
+
+The system has been tested against two simple examples.
+They can be run using the following commands
+
+```bash
+$ python -m dgt.train data/politics.json
+```
+
+
+```bash
+$ python -m dgt.train data/more_gradient_rules.json
+```
