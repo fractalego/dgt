@@ -1,10 +1,10 @@
 {
-  "facts": ["apple(a), is(a,b), fruit(b), is(b,c), delicious(c)"],
-  "goals": ["apple(a), is(a,b), edible(b)"],
-  "relations": ["is", "not"],
+  "facts": ["fruit(a), is(a,b), round(b), is(a,c), delicious(c)"],
+  "goals": ["fruit(a), is(a,b), apple(b)"],
+  "relations": ["is", "and"],
   "non_trainable_rules" : [],
   "trainable_rules": [
-    "MATCH *(a), *(a,b), *(b), *(b,c), *(c) CREATE (a), is(a,c), (c) DELETE b, a-b, b-c",
-    "MATCH *(a), *(a,b), tasty(b) CREATE (a), *(a,c), *(c) DELETE b, a-b"
+    "MATCH *(a), *(a,b), *(b), *(a,c), *(c) CREATE (b), #and(b,c), (c) DELETE a-b, a-c",
+    "MATCH *(a), #and(a,b), *(b) CREATE *(c), *(c,d), *(d) DELETE a, b, a-b"
   ]
 }
