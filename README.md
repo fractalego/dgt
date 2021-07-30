@@ -1,7 +1,7 @@
-DGT
+Code for the paper [Semantic Reasoning with Differentiable Graph Transformations](https://arxiv.org/abs/2107.09579)
 ===
-Preliminary code
-
+This repository contains the code that runs the toy examples in the paper.
+While still a work in progress, the code is functional and illustrates the inner workings of the algorithm described in the article.
 
 Installation
 ------------
