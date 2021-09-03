@@ -33,7 +33,6 @@ They can be run using the following commands
 $ python -m dgt.train data/politics.json
 ```
 
-
 ```bash
 $ python -m dgt.train data/more_gradient_rules.json
 ```
