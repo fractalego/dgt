@@ -1,5 +1,5 @@
 parvusdb==0.0.25
-numpy==1.19.5
+numpy==1.22.0
 gensim==3.8.1
 torch==1.8.1
 torchvision==0.9.1
